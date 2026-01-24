@@ -245,14 +245,18 @@ class MainScreen(Screen):
         except Exception:
             pass  # Silently ignore refresh errors
 
-    def _refresh_series(self) -> None:
-        """Refresh the series panel."""
+    def _refresh_series(self, restore_followed_id: int | None = None) -> None:
+        """Refresh the series panel.
+
+        Args:
+            restore_followed_id: Optional series ID to restore highlight to.
+        """
         try:
             followed = self._series_service.get_followed_series()
             ignored = self._series_service.get_ignored_series()
 
             series_panel = self.query_one(SeriesPanel)
-            series_panel.update_series(followed, ignored)
+            series_panel.update_series(followed, ignored, restore_followed_id)
         except Exception:
             pass  # Silently ignore refresh errors
 
@@ -287,6 +291,8 @@ class MainScreen(Screen):
             try:
                 if result is None:
                     self._set_status("Edit cancelled")
+                    # Still restore selection on cancel
+                    self._refresh_series(series_id)
                     return
 
                 # Re-fetch the series from the database
@@ -301,7 +307,7 @@ class MainScreen(Screen):
                 self._series_service.session.commit()
 
                 self._set_status(f"Updated settings for: {series_name}")
-                self._refresh_all()
+                self._refresh_series(series_id)
             except Exception as e:
                 self._set_status(f"Error: {e}")
 

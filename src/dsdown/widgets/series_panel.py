@@ -50,16 +50,19 @@ class SeriesPanel(Vertical):
         self,
         followed: Sequence[Series],
         ignored: Sequence[Series],
+        restore_followed_id: int | None = None,
     ) -> None:
         """Update the displayed series.
 
         Args:
             followed: List of followed series.
             ignored: List of ignored series.
+            restore_followed_id: Optional series ID to restore highlight to in followed list.
         """
         try:
             self._followed = list(followed)
             self._ignored = list(ignored)
+            restore_index = None
 
             # Use batch_update to prevent intermediate renders
             with self.app.batch_update():
@@ -70,8 +73,10 @@ class SeriesPanel(Vertical):
 
                     followed_list = self.query_one("#followed-listview", ListView)
                     followed_list.clear()
-                    for series in self._followed:
+                    for i, series in enumerate(self._followed):
                         followed_list.append(SeriesItem(series))
+                        if restore_followed_id and series.id == restore_followed_id:
+                            restore_index = i
                 except Exception:
                     pass
 
@@ -86,6 +91,17 @@ class SeriesPanel(Vertical):
                         ignored_list.append(SeriesItem(series))
                 except Exception:
                     pass
+
+            # Restore highlight after batch_update completes
+            if restore_index is not None:
+                def do_restore() -> None:
+                    try:
+                        lv = self.query_one("#followed-listview", ListView)
+                        lv.index = restore_index
+                        lv.focus()
+                    except Exception:
+                        pass
+                self.set_timer(0.1, do_restore)
         except Exception:
             pass
 
