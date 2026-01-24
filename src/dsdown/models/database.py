@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -46,3 +46,22 @@ def init_db(db_path: Path | None = None) -> None:
     """Initialize the database, creating all tables."""
     engine = get_engine(db_path)
     Base.metadata.create_all(engine)
+    _run_migrations(engine)
+
+
+def _run_migrations(engine: Engine) -> None:
+    """Run any necessary database migrations."""
+    inspector = inspect(engine)
+
+    # Migration: Add include_series_in_filename column to series table
+    if "series" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("series")]
+        if "include_series_in_filename" not in columns:
+            with engine.connect() as conn:
+                conn.execute(
+                    text(
+                        "ALTER TABLE series ADD COLUMN include_series_in_filename "
+                        "BOOLEAN NOT NULL DEFAULT 1"
+                    )
+                )
+                conn.commit()

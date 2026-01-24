@@ -212,7 +212,12 @@ class DownloadService:
                     self.record_download_start(chapter)
 
                     # Download the chapter with series name and title for filename
-                    series_name = chapter.series.name if chapter.series else None
+                    # Only include series name if the setting is enabled
+                    include_series = (
+                        chapter.series.include_series_in_filename
+                        if chapter.series else True
+                    )
+                    series_name = chapter.series.name if chapter.series and include_series else None
                     await client.download_chapter(
                         chapter.url,
                         destination,
@@ -290,7 +295,12 @@ class DownloadService:
             self.record_download_start(chapter)
 
             # Download with series name and title for filename
-            series_name = chapter.series.name if chapter.series else None
+            # Only include series name if the setting is enabled
+            include_series = (
+                chapter.series.include_series_in_filename
+                if chapter.series else True
+            )
+            series_name = chapter.series.name if chapter.series and include_series else None
             async with DynastyClient() as client:
                 await client.download_chapter(
                     chapter.url,

@@ -13,7 +13,7 @@ from textual.widgets import Footer, Header, Static
 from dsdown.config import DYNASTY_BASE_URL
 from dsdown.models.chapter import Chapter
 from dsdown.models.database import get_session, init_db
-from dsdown.screens.follow_dialog import FollowDialog
+from dsdown.screens.follow_dialog import FollowDialog, FollowDialogResult
 from dsdown.services.chapter_service import ChapterService
 from dsdown.services.download_service import DownloadService
 from dsdown.services.series_service import SeriesService
@@ -280,8 +280,9 @@ class MainScreen(Screen):
         series_id = series.id
         series_name = series.name
         existing_path = Path(series.download_path) if series.download_path else None
+        include_series = series.include_series_in_filename
 
-        def handle_edit_result(result: Path | None) -> None:
+        def handle_edit_result(result: FollowDialogResult | None) -> None:
             """Handle the result from the edit dialog."""
             try:
                 if result is None:
@@ -294,17 +295,21 @@ class MainScreen(Screen):
                     self._set_status("Series not found")
                     return
 
-                # Update the download path
-                fresh_series.download_path = str(result)
+                # Update the settings
+                fresh_series.download_path = str(result.path)
+                fresh_series.include_series_in_filename = result.include_series_in_filename
                 self._series_service.session.commit()
 
-                self._set_status(f"Updated path for: {series_name}")
+                self._set_status(f"Updated settings for: {series_name}")
                 self._refresh_all()
             except Exception as e:
                 self._set_status(f"Error: {e}")
 
-        # Show dialog with existing path
-        self.app.push_screen(FollowDialog(series_name, existing_path), handle_edit_result)
+        # Show dialog with existing settings
+        self.app.push_screen(
+            FollowDialog(series_name, existing_path, include_series),
+            handle_edit_result,
+        )
 
     def _get_selected_chapter(self) -> Chapter | None:
         """Get the currently selected chapter, refreshed from the database."""
@@ -389,7 +394,7 @@ class MainScreen(Screen):
             series_name = chapter.series.name
             series_id = chapter.series_id
 
-            def handle_follow_result(result: Path | None) -> None:
+            def handle_follow_result(result: FollowDialogResult | None) -> None:
                 """Handle the result from the follow dialog."""
                 try:
                     if result is None:
@@ -403,7 +408,11 @@ class MainScreen(Screen):
                         return
 
                     # Follow the series
-                    self._series_service.follow_series(series, result)
+                    self._series_service.follow_series(
+                        series,
+                        result.path,
+                        result.include_series_in_filename,
+                    )
 
                     # Queue all unprocessed chapters of this series
                     for ch in self._chapter_service.get_unprocessed_chapters():

@@ -63,15 +63,22 @@ class SeriesService:
         self.session.commit()
         return series
 
-    def follow_series(self, series: Series, download_path: Path) -> None:
+    def follow_series(
+        self,
+        series: Series,
+        download_path: Path,
+        include_series_in_filename: bool = True,
+    ) -> None:
         """Mark a series as followed.
 
         Args:
             series: The series to follow.
             download_path: The path to download chapters to.
+            include_series_in_filename: Whether to include series name in downloaded filenames.
         """
         series.status = SeriesStatus.FOLLOWED.value
         series.download_path = str(download_path)
+        series.include_series_in_filename = include_series_in_filename
         self.session.commit()
 
     def ignore_series(self, series: Series) -> None:

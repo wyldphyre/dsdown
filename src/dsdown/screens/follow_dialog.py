@@ -2,16 +2,25 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from textual.app import ComposeResult
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, Static
+from textual.widgets import Button, Checkbox, Input, Label, Static
 
 
-class FollowDialog(ModalScreen[Optional[Path]]):
+@dataclass
+class FollowDialogResult:
+    """Result from the follow dialog."""
+
+    path: Path
+    include_series_in_filename: bool
+
+
+class FollowDialog(ModalScreen[Optional[FollowDialogResult]]):
     """Modal dialog for setting a download path when following a series."""
 
     BINDINGS = [
@@ -48,6 +57,12 @@ class FollowDialog(ModalScreen[Optional[Path]]):
         margin-bottom: 1;
     }
 
+    FollowDialog #checkbox-row {
+        width: 100%;
+        height: auto;
+        margin-bottom: 1;
+    }
+
     FollowDialog #buttons {
         width: 100%;
         height: auto;
@@ -59,10 +74,16 @@ class FollowDialog(ModalScreen[Optional[Path]]):
     }
     """
 
-    def __init__(self, series_name: str, existing_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        series_name: str,
+        existing_path: Path | None = None,
+        include_series_in_filename: bool = True,
+    ) -> None:
         super().__init__()
         self.series_name = series_name
         self._existing_path = existing_path
+        self._include_series_in_filename = include_series_in_filename
         self._is_edit_mode = existing_path is not None
         if existing_path:
             self._default_path = existing_path
@@ -92,6 +113,12 @@ class FollowDialog(ModalScreen[Optional[Path]]):
                 placeholder="Enter download path...",
                 id="path-input",
             )
+            with Horizontal(id="checkbox-row"):
+                yield Checkbox(
+                    "Include series name in filename",
+                    value=self._include_series_in_filename,
+                    id="include-series-checkbox",
+                )
             with Vertical(id="buttons"):
                 yield Button(button_text, variant="primary", id="follow-btn")
                 yield Button("Cancel", variant="default", id="cancel-btn")
@@ -105,19 +132,25 @@ class FollowDialog(ModalScreen[Optional[Path]]):
             cleaned = cleaned[1:-1]
         return Path(cleaned)
 
+    def _get_result(self) -> FollowDialogResult:
+        """Get the current dialog result."""
+        path_input = self.query_one("#path-input", Input)
+        checkbox = self.query_one("#include-series-checkbox", Checkbox)
+        return FollowDialogResult(
+            path=self._clean_path(path_input.value),
+            include_series_in_filename=checkbox.value,
+        )
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses."""
         if event.button.id == "follow-btn":
-            path_input = self.query_one("#path-input", Input)
-            path = self._clean_path(path_input.value)
-            self.dismiss(path)
+            self.dismiss(self._get_result())
         elif event.button.id == "cancel-btn":
             self.dismiss(None)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle enter key in input."""
-        path = self._clean_path(event.value)
-        self.dismiss(path)
+        self.dismiss(self._get_result())
 
     def action_cancel(self) -> None:
         """Cancel the dialog."""
