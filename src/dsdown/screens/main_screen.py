@@ -403,6 +403,9 @@ class MainScreen(Screen):
     def action_ignore(self) -> None:
         """Ignore the series of the selected chapter."""
         try:
+            chapter_list = self.query_one(ChapterList)
+            current_index = chapter_list.get_highlighted_index()
+
             chapter = self._get_selected_chapter()
             if not chapter:
                 self._set_status("No chapter selected")
@@ -430,12 +433,19 @@ class MainScreen(Screen):
 
             self._set_status(f"Ignored series: {series_name}")
             self._refresh_all()
+
+            # Restore selection to the next chapter
+            if current_index is not None:
+                chapter_list.restore_highlight(current_index)
         except Exception as e:
             self._set_status(f"Error: {e}")
 
     def action_follow(self) -> None:
         """Follow the series of the selected chapter."""
         try:
+            chapter_list = self.query_one(ChapterList)
+            current_index = chapter_list.get_highlighted_index()
+
             chapter = self._get_selected_chapter()
             if not chapter:
                 self._set_status("No chapter selected")
@@ -476,6 +486,10 @@ class MainScreen(Screen):
 
                     self._set_status(f"Following series: {series_name}")
                     self._refresh_all()
+
+                    # Restore selection to the next chapter
+                    if current_index is not None:
+                        chapter_list.restore_highlight(current_index)
                 except Exception as e:
                     self._set_status(f"Error: {e}")
 
@@ -537,6 +551,9 @@ class MainScreen(Screen):
     def action_process(self) -> None:
         """Mark the selected chapter as processed."""
         try:
+            chapter_list = self.query_one(ChapterList)
+            current_index = chapter_list.get_highlighted_index()
+
             chapter = self._get_selected_chapter()
             if not chapter:
                 self._set_status("No chapter selected")
@@ -545,13 +562,20 @@ class MainScreen(Screen):
             title = chapter.title
             self._chapter_service.mark_processed(chapter)
             self._set_status(f"Processed: {title}")
-            self._refresh_all()  # Use deferred refresh
+            self._refresh_all()
+
+            # Restore selection to the next chapter
+            if current_index is not None:
+                chapter_list.restore_highlight(current_index)
         except Exception as e:
             self._set_status(f"Error: {e}")
 
     def action_queue(self) -> None:
         """Add the selected chapter to the download queue."""
         try:
+            chapter_list = self.query_one(ChapterList)
+            current_index = chapter_list.get_highlighted_index()
+
             chapter = self._get_selected_chapter()
             if not chapter:
                 self._set_status("No chapter selected")
@@ -562,6 +586,10 @@ class MainScreen(Screen):
             self._chapter_service.mark_processed(chapter)
             self._set_status(f"Queued: {title}")
             self._refresh_all()
+
+            # Restore selection to the next chapter
+            if current_index is not None:
+                chapter_list.restore_highlight(current_index)
         except Exception as e:
             self._set_status(f"Error: {e}")
 

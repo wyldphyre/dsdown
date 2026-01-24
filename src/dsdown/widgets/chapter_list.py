@@ -128,6 +128,33 @@ class ChapterList(Vertical):
             pass
         return None
 
+    def get_highlighted_index(self) -> int | None:
+        """Get the index of the currently highlighted chapter."""
+        try:
+            listview = self.query_one("#chapter-listview", ListView)
+            return listview.index
+        except Exception:
+            return None
+
+    def restore_highlight(self, index: int) -> None:
+        """Restore the highlight to a specific index after a delay.
+
+        Args:
+            index: The index to highlight. Will be clamped to valid range.
+        """
+        def do_restore() -> None:
+            try:
+                listview = self.query_one("#chapter-listview", ListView)
+                if listview.child_count == 0:
+                    return
+                # Clamp to valid range
+                valid_index = min(index, listview.child_count - 1)
+                listview.index = valid_index
+            except Exception:
+                pass
+
+        self.set_timer(0.1, do_restore)
+
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle chapter selection."""
         try:
