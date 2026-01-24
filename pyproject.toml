@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dsdown"
+version = "0.1.0"
+description = "A TUI for managing and downloading files from dynasty-scans.com"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+dependencies = [
+    "textual>=0.47.0",
+    "httpx>=0.27.0",
+    "beautifulsoup4>=4.12.0",
+    "sqlalchemy>=2.0.0",
+    "lxml>=5.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+dsdown = "dsdown.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dsdown"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
