@@ -91,9 +91,9 @@ class DownloadQueueWidget(Vertical):
                 try:
                     status = self.query_one("#queue-status", Static)
                     if next_slot_time:
-                        status.update(f"Downloads: {8 - available_slots}/8 (resets {next_slot_time})")
+                        status.update(f"Slots: {available_slots}/8 (next at {next_slot_time})")
                     else:
-                        status.update(f"Downloads: {8 - available_slots}/8 available")
+                        status.update(f"Slots: {available_slots}/8 available")
                 except Exception:
                     pass
         except Exception:
