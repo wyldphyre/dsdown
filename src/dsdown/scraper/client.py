@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from pathlib import Path
 
 import httpx
@@ -81,10 +82,54 @@ class DynastyClient:
         response.raise_for_status()
         return response.text
 
+    def _extract_chapter_number(self, title: str) -> str | None:
+        """Extract chapter number from a chapter title.
+
+        Args:
+            title: The chapter title (e.g., 'Series Name ch001' or 'Chapter 15').
+
+        Returns:
+            The chapter number as a string, or None if not found.
+        """
+        # Common patterns for chapter numbers
+        patterns = [
+            r'\bch\.?\s*(\d+(?:\.\d+)?)',  # ch1, ch.1, ch 1, ch01
+            r'\bchapter\s*(\d+(?:\.\d+)?)',  # chapter 1, chapter01
+            r'\bc(\d+(?:\.\d+)?)\b',  # c1, c01 (standalone)
+            r'#(\d+(?:\.\d+)?)',  # #1, #01
+            r'\b(\d+(?:\.\d+)?)\s*$',  # trailing number
+        ]
+
+        title_lower = title.lower()
+        for pattern in patterns:
+            match = re.search(pattern, title_lower, re.IGNORECASE)
+            if match:
+                return match.group(1)
+
+        return None
+
+    def _sanitize_filename(self, name: str) -> str:
+        """Sanitize a string for use as a filename.
+
+        Args:
+            name: The string to sanitize.
+
+        Returns:
+            A filename-safe string.
+        """
+        # Remove or replace characters that are problematic in filenames
+        invalid_chars = '<>:"/\\|?*'
+        result = name
+        for char in invalid_chars:
+            result = result.replace(char, '_')
+        return result.strip()
+
     async def download_chapter(
         self,
         chapter_url: str,
         destination: Path,
+        series_name: str | None = None,
+        chapter_title: str | None = None,
         progress_callback: callable | None = None,
     ) -> Path:
         """Download a chapter archive.
@@ -92,6 +137,8 @@ class DynastyClient:
         Args:
             chapter_url: The chapter URL path (e.g., '/chapters/some_chapter').
             destination: Directory to save the downloaded file.
+            series_name: Optional series name for filename formatting.
+            chapter_title: Optional chapter title for extracting chapter number.
             progress_callback: Optional callback for progress updates.
 
         Returns:
@@ -107,21 +154,34 @@ class DynastyClient:
         async with self.client.stream("GET", download_url) as response:
             response.raise_for_status()
 
-            # Try to get filename from Content-Disposition header
-            content_disposition = response.headers.get("content-disposition", "")
-            filename = None
-            if "filename=" in content_disposition:
-                # Parse filename from header
-                for part in content_disposition.split(";"):
-                    part = part.strip()
-                    if part.startswith("filename="):
-                        filename = part[9:].strip('"\'')
-                        break
+            # Determine the filename
+            if series_name and chapter_title:
+                # Extract chapter number from title
+                chapter_num = self._extract_chapter_number(chapter_title)
+                if chapter_num:
+                    filename = f"{self._sanitize_filename(series_name)} ch{chapter_num}.cbz"
+                else:
+                    # No chapter number found, use slug from URL
+                    slug = chapter_url.rstrip("/").split("/")[-1]
+                    filename = f"{self._sanitize_filename(series_name)} - {slug}.cbz"
+            else:
+                # Fallback: try Content-Disposition header
+                content_disposition = response.headers.get("content-disposition", "")
+                filename = None
+                if "filename=" in content_disposition:
+                    for part in content_disposition.split(";"):
+                        part = part.strip()
+                        if part.startswith("filename="):
+                            filename = part[9:].strip('"\'')
+                            # Change .zip to .cbz
+                            if filename.lower().endswith('.zip'):
+                                filename = filename[:-4] + '.cbz'
+                            break
 
-            if not filename:
-                # Fallback: use chapter slug from URL
-                slug = chapter_url.rstrip("/").split("/")[-1]
-                filename = f"{slug}.zip"
+                if not filename:
+                    # Use chapter slug from URL
+                    slug = chapter_url.rstrip("/").split("/")[-1]
+                    filename = f"{slug}.cbz"
 
             # Ensure destination directory exists
             destination.mkdir(parents=True, exist_ok=True)

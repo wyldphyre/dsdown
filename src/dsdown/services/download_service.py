@@ -211,8 +211,14 @@ class DownloadService:
                     # Record download start for rate limiting
                     self.record_download_start(chapter)
 
-                    # Download the chapter
-                    await client.download_chapter(chapter.url, destination)
+                    # Download the chapter with series name and title for filename
+                    series_name = chapter.series.name if chapter.series else None
+                    await client.download_chapter(
+                        chapter.url,
+                        destination,
+                        series_name=series_name,
+                        chapter_title=chapter.title,
+                    )
 
                     # Mark as completed
                     entry.status = DownloadStatus.COMPLETED.value
@@ -283,9 +289,15 @@ class DownloadService:
             # Record download start
             self.record_download_start(chapter)
 
-            # Download
+            # Download with series name and title for filename
+            series_name = chapter.series.name if chapter.series else None
             async with DynastyClient() as client:
-                await client.download_chapter(chapter.url, destination)
+                await client.download_chapter(
+                    chapter.url,
+                    destination,
+                    series_name=series_name,
+                    chapter_title=chapter.title,
+                )
 
             # Mark as downloaded
             chapter_service.mark_downloaded(chapter)
