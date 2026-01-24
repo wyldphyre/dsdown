@@ -8,11 +8,12 @@ from pathlib import Path
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, Header, Static
+from textual.widgets import Footer, Header, ListView, Static
 
 from dsdown.config import DYNASTY_BASE_URL
 from dsdown.models.chapter import Chapter
 from dsdown.models.database import get_session, init_db
+from dsdown.screens.confirm_dialog import ConfirmDialog
 from dsdown.screens.follow_dialog import FollowDialog, FollowDialogResult
 from dsdown.services.chapter_service import ChapterService
 from dsdown.services.download_service import DownloadService
@@ -30,6 +31,7 @@ class MainScreen(Screen):
         ("f", "fetch", "Fetch"),
         ("i", "ignore", "Ignore"),
         ("w", "follow", "Follow"),
+        ("u", "unfollow", "Unfollow"),
         ("o", "open", "Open"),
         ("p", "process", "Process"),
         ("q", "queue", "Queue"),
@@ -176,6 +178,17 @@ class MainScreen(Screen):
         self._download_service = None
         self._selected_chapter: Chapter | None = None
 
+    def check_action(self, action: str, parameters: tuple) -> bool | None:
+        """Check if an action should be shown/enabled."""
+        if action == "unfollow":
+            # Only show unfollow when followed series list has focus
+            try:
+                series_panel = self.query_one(SeriesPanel)
+                return series_panel.get_highlighted_followed_series() is not None
+            except Exception:
+                return False
+        return True
+
     def compose(self) -> ComposeResult:
         """Compose the main screen."""
         yield Header()
@@ -269,6 +282,14 @@ class MainScreen(Screen):
         """Handle chapter highlight."""
         self._selected_chapter = event.chapter
 
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        """Handle list view highlight changes to refresh conditional bindings."""
+        self.refresh_bindings()
+
+    def on_descendant_focus(self, event) -> None:
+        """Handle focus changes to refresh conditional bindings."""
+        self.refresh_bindings()
+
     def on_chapter_list_chapter_selected(self, event: ChapterList.ChapterSelected) -> None:
         """Handle chapter selection (Enter key)."""
         self._selected_chapter = event.chapter
@@ -276,13 +297,40 @@ class MainScreen(Screen):
         self._open_chapter(event.chapter)
 
     def on_series_panel_series_selected(self, event: SeriesPanel.SeriesSelected) -> None:
-        """Handle series selection - allow editing download path for followed series."""
-        series = event.series
-        if not series.is_followed:
-            return  # Only allow editing followed series
+        """Handle series selection.
 
+        - For followed series: edit download path settings
+        - For ignored series: unignore the series
+        """
+        series = event.series
         series_id = series.id
         series_name = series.name
+
+        if series.is_ignored:
+            # Confirm before unignoring
+            def handle_unignore_confirm(confirmed: bool) -> None:
+                if not confirmed:
+                    self._set_status("Unignore cancelled")
+                    return
+                try:
+                    fresh_series = self._series_service.get_series_by_id(series_id)
+                    if fresh_series:
+                        self._series_service.unfollow_series(fresh_series)
+                        self._set_status(f"Unignored: {series_name}")
+                        self._refresh_all()
+                except Exception as e:
+                    self._set_status(f"Error: {e}")
+
+            self.app.push_screen(
+                ConfirmDialog("Unignore Series", f"Stop ignoring '{series_name}'?"),
+                handle_unignore_confirm,
+            )
+            return
+
+        if not series.is_followed:
+            return  # Series has no status, nothing to do
+
+        # Edit followed series settings
         existing_path = Path(series.download_path) if series.download_path else None
         include_series = series.include_series_in_filename
 
@@ -436,6 +484,38 @@ class MainScreen(Screen):
         except Exception as e:
             self._set_status(f"Error: {e}")
 
+    def action_unfollow(self) -> None:
+        """Unfollow the currently highlighted followed series."""
+        try:
+            series_panel = self.query_one(SeriesPanel)
+            series = series_panel.get_highlighted_followed_series()
+            if not series:
+                self._set_status("No followed series selected")
+                return
+
+            series_id = series.id
+            series_name = series.name
+
+            def handle_unfollow_confirm(confirmed: bool) -> None:
+                if not confirmed:
+                    self._set_status("Unfollow cancelled")
+                    return
+                try:
+                    fresh_series = self._series_service.get_series_by_id(series_id)
+                    if fresh_series:
+                        self._series_service.unfollow_series(fresh_series)
+                        self._set_status(f"Unfollowed: {series_name}")
+                        self._refresh_all()
+                except Exception as e:
+                    self._set_status(f"Error: {e}")
+
+            self.app.push_screen(
+                ConfirmDialog("Unfollow Series", f"Stop following '{series_name}'?"),
+                handle_unfollow_confirm,
+            )
+        except Exception as e:
+            self._set_status(f"Error: {e}")
+
     def _open_chapter(self, chapter: Chapter) -> None:
         """Open a chapter in the browser."""
         url = f"{DYNASTY_BASE_URL}{chapter.url}"
@@ -502,7 +582,7 @@ class MainScreen(Screen):
     def action_help(self) -> None:
         """Show help information."""
         self._set_status(
-            "F=Fetch I=Ignore W=Follow O=Open P=Process Q=Queue S=Start"
+            "F=Fetch I=Ignore W=Follow O=Open P=Process Q=Queue S=Start U=Unfollow(followed)"
         )
 
     def action_quit(self) -> None:

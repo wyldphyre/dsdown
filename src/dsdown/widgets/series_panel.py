@@ -112,3 +112,23 @@ class SeriesPanel(Vertical):
                 self.post_message(self.SeriesSelected(event.item.series))
         except Exception:
             pass
+
+    def get_highlighted_followed_series(self) -> Series | None:
+        """Get the currently highlighted series in the followed list.
+
+        Returns:
+            The highlighted Series, or None if nothing is highlighted or
+            the followed list doesn't have focus.
+        """
+        try:
+            followed_list = self.query_one("#followed-listview", ListView)
+            if not followed_list.has_focus:
+                return None
+            if followed_list.index is None:
+                return None
+            item = followed_list.highlighted_child
+            if isinstance(item, SeriesItem):
+                return item.series
+        except Exception:
+            pass
+        return None
