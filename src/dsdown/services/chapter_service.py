@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date
 
 from sqlalchemy import select
@@ -15,6 +16,16 @@ from dsdown.models.series import Series, SeriesStatus
 from dsdown.scraper.chapter_parser import ChapterPageParser
 from dsdown.scraper.client import DynastyClient
 from dsdown.scraper.parser import ParsedChapter, ReleasesParser
+
+
+@dataclass
+class FetchResult:
+    """Result of fetching new chapters."""
+
+    total: int
+    queued: int
+    ignored: int
+    new: int  # Unprocessed (not followed or ignored)
 
 
 class ChapterService:
@@ -106,7 +117,7 @@ class ChapterService:
     async def fetch_new_chapters(
         self,
         progress_callback: callable | None = None,
-    ) -> list[Chapter]:
+    ) -> FetchResult:
         """Fetch new chapters from the releases page.
 
         Args:
@@ -114,7 +125,7 @@ class ChapterService:
                 Called with (message: str, current: int, total: int | None)
 
         Returns:
-            List of newly created chapters.
+            FetchResult with counts of total, queued, ignored, and new chapters.
         """
         config = get_config()
         last_url = config.last_fetched_chapter_url
@@ -168,10 +179,15 @@ class ChapterService:
         if first_chapter_url:
             config.last_fetched_chapter_url = first_chapter_url
 
-        # Process chapters based on series status
-        await self._process_chapters_by_series(new_chapters)
+        # Process chapters based on series status and get counts
+        queued, ignored = await self._process_chapters_by_series(new_chapters)
 
-        return new_chapters
+        return FetchResult(
+            total=len(new_chapters),
+            queued=queued,
+            ignored=ignored,
+            new=len(new_chapters) - queued - ignored,
+        )
 
     async def _create_chapter_from_parsed(
         self,
@@ -207,11 +223,17 @@ class ChapterService:
             series_id=series_id,
         )
 
-    async def _process_chapters_by_series(self, chapters: list[Chapter]) -> None:
-        """Process chapters based on their series status."""
+    async def _process_chapters_by_series(self, chapters: list[Chapter]) -> tuple[int, int]:
+        """Process chapters based on their series status.
+
+        Returns:
+            Tuple of (queued_count, ignored_count).
+        """
         from dsdown.services.download_service import DownloadService
 
         download_service = DownloadService(self.session)
+        queued = 0
+        ignored = 0
 
         for chapter in chapters:
             if chapter.series:
@@ -219,6 +241,10 @@ class ChapterService:
                     # Auto-queue followed series chapters
                     download_service.add_to_queue(chapter)
                     self.mark_processed(chapter)
+                    queued += 1
                 elif chapter.series.is_ignored:
                     # Auto-process ignored series chapters
                     self.mark_processed(chapter)
+                    ignored += 1
+
+        return queued, ignored
