@@ -45,8 +45,8 @@ class ReleasesParser:
             return chapters
 
         # Look for chapter list items and date headers
-        # Date headers are typically h3 or similar, chapters are in dd elements
-        for element in content.find_all(["h3", "h4", "dd", "div", "li"]):
+        # Date headers are in dt elements, chapters are in dd elements
+        for element in content.find_all(["dt", "dd"]):
             # Check if this is a date header
             if self._is_date_header(element):
                 current_date = self._parse_date_header(element)
@@ -60,8 +60,8 @@ class ReleasesParser:
 
     def _is_date_header(self, element: Tag) -> bool:
         """Check if an element is a date header."""
-        # Date headers are typically h3/h4 with a date-like text
-        if element.name in ["h3", "h4"]:
+        # Date headers are dt elements with a date-like text
+        if element.name == "dt":
             text = element.get_text(strip=True)
             # Check for date patterns like "January 23, 2026"
             if re.search(r"\w+\s+\d{1,2},?\s+\d{4}", text):
@@ -90,7 +90,9 @@ class ReleasesParser:
 
     def _is_chapter_entry(self, element: Tag) -> bool:
         """Check if an element is a chapter entry."""
-        # Chapter entries typically have links to /chapters/
+        # Chapter entries are dd elements with links to /chapters/
+        if element.name != "dd":
+            return False
         chapter_link = element.select_one('a[href*="/chapters/"]')
         if chapter_link:
             href = chapter_link.get("href", "")

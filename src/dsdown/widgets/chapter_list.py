@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 from textual.app import ComposeResult
-from textual.containers import ScrollableContainer, Vertical
+from textual.containers import Vertical
 from textual.message import Message
 from textual.widgets import Label, ListItem, ListView, Static
 
@@ -35,15 +35,19 @@ class ChapterItem(ListItem):
             yield Label(tags_text, classes="chapter-tags")
 
 
-class DateHeader(Static):
-    """A date header for grouping chapters."""
+class DateHeaderItem(ListItem):
+    """A date header item for grouping chapters in the list."""
 
     def __init__(self, release_date: date | None) -> None:
+        super().__init__()
+        self.disabled = True
         if release_date:
-            text = release_date.strftime("%B %d, %Y")
+            self._text = release_date.strftime("%B %d, %Y")
         else:
-            text = "Unknown Date"
-        super().__init__(f"=== {text} ===", classes="date-header")
+            self._text = "Unknown Date"
+
+    def compose(self) -> ComposeResult:
+        yield Static(f"── {self._text} ──", classes="date-header")
 
 
 class ChapterList(Vertical):
@@ -110,6 +114,8 @@ class ChapterList(Vertical):
 
                     for release_date in sorted_dates:
                         chapters = chapters_by_date[release_date]
+                        # Add date header
+                        listview.append(DateHeaderItem(release_date))
                         for chapter in chapters:
                             listview.append(ChapterItem(chapter))
                 except Exception:
@@ -149,7 +155,22 @@ class ChapterList(Vertical):
                     return
                 # Clamp to valid range
                 valid_index = min(index, listview.child_count - 1)
-                listview.index = valid_index
+                # Skip disabled items (date headers)
+                while valid_index < listview.child_count:
+                    item = listview.children[valid_index]
+                    if isinstance(item, ChapterItem):
+                        break
+                    valid_index += 1
+                # If we went past the end, search backwards
+                if valid_index >= listview.child_count:
+                    valid_index = min(index, listview.child_count - 1)
+                    while valid_index >= 0:
+                        item = listview.children[valid_index]
+                        if isinstance(item, ChapterItem):
+                            break
+                        valid_index -= 1
+                if valid_index >= 0:
+                    listview.index = valid_index
             except Exception:
                 pass
 
