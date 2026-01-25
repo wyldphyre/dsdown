@@ -21,18 +21,24 @@ class ChapterItem(ListItem):
 
     def compose(self) -> ComposeResult:
         """Compose the chapter item content."""
-        # Title
-        yield Label(self.chapter.title, classes="chapter-title")
+        from rich.text import Text
 
-        # Authors
+        content = Text()
+
+        # Title (bold)
+        content.append(self.chapter.title, style="bold")
+
+        # Authors (dim, indented on new line)
         if self.chapter.authors:
             authors_text = f"by {', '.join(self.chapter.authors)}"
-            yield Label(authors_text, classes="chapter-authors")
+            content.append(f"\n  {authors_text}", style="dim")
 
-        # Tags
+        # Tags (cyan, indented on new line)
         if self.chapter.tags:
             tags_text = " ".join(f"[{tag}]" for tag in self.chapter.tags)
-            yield Label(tags_text, classes="chapter-tags")
+            content.append(f"\n  {tags_text}", style="cyan")
+
+        yield Static(content)
 
 
 class DateHeaderItem(ListItem):

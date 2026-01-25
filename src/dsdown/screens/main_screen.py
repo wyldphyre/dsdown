@@ -86,6 +86,19 @@ class MainScreen(Screen):
         min-height: 3;
     }
 
+    ChapterItem {
+        height: auto;
+    }
+
+    ChapterItem > Static {
+        width: 100%;
+    }
+
+    DateHeaderItem {
+        height: auto;
+        background: $surface;
+    }
+
     .chapter-title {
         text-style: bold;
     }
@@ -96,15 +109,13 @@ class MainScreen(Screen):
     }
 
     .chapter-tags {
-        color: $accent;
+        color: $success;
         padding-left: 2;
     }
 
     .date-header {
         text-align: center;
         text-style: bold;
-        background: $surface;
-        margin: 1 0;
     }
 
     DownloadQueueWidget {
