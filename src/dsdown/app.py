@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from textual.app import App
 
+from dsdown import __version__
 from dsdown.screens.main_screen import MainScreen
 
 
 class DsdownApp(App):
     """Dynasty Scans download manager TUI application."""
 
-    TITLE = "dsdown - Dynasty Scans Manager"
+    TITLE = f"dsdown v{__version__} - Dynasty Scans Manager"
 
     CSS = """
     Screen {
