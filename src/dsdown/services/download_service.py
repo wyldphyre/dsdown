@@ -14,6 +14,7 @@ from dsdown.models.chapter import Chapter
 from dsdown.models.database import get_session
 from dsdown.models.download import DownloadHistory, DownloadQueue, DownloadStatus
 from dsdown.scraper.client import DynastyClient
+from dsdown.services.comicinfo import add_comicinfo_to_cbz
 
 
 class DownloadService:
@@ -218,12 +219,15 @@ class DownloadService:
                         if chapter.series else True
                     )
                     series_name = chapter.series.name if chapter.series and include_series else None
-                    await client.download_chapter(
+                    cbz_path = await client.download_chapter(
                         chapter.url,
                         destination,
                         series_name=series_name,
                         chapter_title=chapter.title,
                     )
+
+                    # Add ComicInfo.xml metadata
+                    add_comicinfo_to_cbz(cbz_path, chapter)
 
                     # Mark as completed
                     entry.status = DownloadStatus.COMPLETED.value
@@ -302,12 +306,15 @@ class DownloadService:
             )
             series_name = chapter.series.name if chapter.series and include_series else None
             async with DynastyClient() as client:
-                await client.download_chapter(
+                cbz_path = await client.download_chapter(
                     chapter.url,
                     destination,
                     series_name=series_name,
                     chapter_title=chapter.title,
                 )
+
+            # Add ComicInfo.xml metadata
+            add_comicinfo_to_cbz(cbz_path, chapter)
 
             # Mark as downloaded
             chapter_service.mark_downloaded(chapter)
