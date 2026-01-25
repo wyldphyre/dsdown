@@ -26,13 +26,13 @@ class QueueItem(ListItem):
 
         # Status indicator
         if status == DownloadStatus.DOWNLOADING.value:
-            indicator = ">"
+            indicator = "▶"
         elif status == DownloadStatus.PENDING.value:
-            indicator = " "
+            indicator = "○"
         elif status == DownloadStatus.COMPLETED.value:
-            indicator = "+"
+            indicator = "✓"
         else:
-            indicator = "!"
+            indicator = "✗"
 
         status_label = f"[{status}]" if status != DownloadStatus.PENDING.value else ""
 
@@ -45,11 +45,13 @@ class DownloadQueueWidget(Vertical):
     def __init__(self) -> None:
         super().__init__()
         self._queue: list[DownloadQueueModel] = []
+        self._downloading_title: str = ""
 
     def compose(self) -> ComposeResult:
         """Compose the download queue widget."""
         yield Label("Download Queue (0)", id="queue-header")
         yield ListView(id="queue-listview")
+        yield Static("", id="download-progress")
         yield Static("", id="queue-status")
 
     def update_queue(
@@ -102,3 +104,43 @@ class DownloadQueueWidget(Vertical):
     def get_queue_count(self) -> int:
         """Get the number of items in the queue."""
         return len(self._queue)
+
+    def set_download_progress(
+        self, title: str, downloaded: int, total: int
+    ) -> None:
+        """Update the download progress display.
+
+        Args:
+            title: Title of the chapter being downloaded.
+            downloaded: Bytes downloaded so far.
+            total: Total bytes to download.
+        """
+        try:
+            self._downloading_title = title
+            progress_static = self.query_one("#download-progress", Static)
+
+            if total > 0:
+                percent = (downloaded / total) * 100
+                # Create a simple text progress bar
+                bar_width = 20
+                filled = int(bar_width * downloaded / total)
+                bar = "█" * filled + "░" * (bar_width - filled)
+                size_mb = downloaded / (1024 * 1024)
+                total_mb = total / (1024 * 1024)
+                progress_static.update(
+                    f"▶ {title[:30]}{'...' if len(title) > 30 else ''}\n"
+                    f"  [{bar}] {percent:.0f}% ({size_mb:.1f}/{total_mb:.1f} MB)"
+                )
+            else:
+                progress_static.update(f"▶ Downloading: {title}")
+        except Exception:
+            pass
+
+    def clear_download_progress(self) -> None:
+        """Clear the download progress display."""
+        try:
+            self._downloading_title = ""
+            progress_static = self.query_one("#download-progress", Static)
+            progress_static.update("")
+        except Exception:
+            pass

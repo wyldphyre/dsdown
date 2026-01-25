@@ -138,6 +138,12 @@ class MainScreen(Screen):
         min-height: 1;
     }
 
+    #download-progress {
+        padding: 0 1;
+        color: $success;
+        height: auto;
+    }
+
     #queue-status {
         padding: 0 1;
         color: $text-muted;
@@ -613,10 +619,27 @@ class MainScreen(Screen):
         self._set_status("Starting download queue...")
 
         def progress(msg: str, current: int, total: int) -> None:
-            self._set_status(msg)
+            self._set_status(f"[{current}/{total}] {msg}")
+            self._refresh_queue()
+
+        def download_progress(title: str, downloaded: int, total: int) -> None:
+            try:
+                queue_widget = self.query_one(DownloadQueueWidget)
+                queue_widget.set_download_progress(title, downloaded, total)
+                self.refresh()
+            except Exception:
+                pass
 
         try:
-            downloaded = await self._download_service.process_queue(progress)
+            downloaded = await self._download_service.process_queue(
+                progress, download_progress
+            )
+            # Clear progress display
+            try:
+                queue_widget = self.query_one(DownloadQueueWidget)
+                queue_widget.clear_download_progress()
+            except Exception:
+                pass
             self._set_status(f"Downloaded {len(downloaded)} chapter(s)")
             self._refresh_all()
         except Exception as e:

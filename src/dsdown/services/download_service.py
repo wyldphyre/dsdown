@@ -151,6 +151,7 @@ class DownloadService:
     async def process_queue(
         self,
         progress_callback: callable | None = None,
+        download_progress_callback: callable | None = None,
     ) -> list[Chapter]:
         """Process the download queue.
 
@@ -159,6 +160,8 @@ class DownloadService:
         Args:
             progress_callback: Optional callback for progress updates.
                 Called with (message: str, current: int, total: int)
+            download_progress_callback: Optional callback for file download progress.
+                Called with (title: str, downloaded: int, total: int)
 
         Returns:
             List of successfully downloaded chapters.
@@ -219,11 +222,18 @@ class DownloadService:
                         if chapter.series else True
                     )
                     series_name = chapter.series.name if chapter.series and include_series else None
+
+                    # Create file progress callback
+                    def file_progress(downloaded: int, total: int) -> None:
+                        if download_progress_callback:
+                            download_progress_callback(chapter.title, downloaded, total)
+
                     cbz_path = await client.download_chapter(
                         chapter.url,
                         destination,
                         series_name=series_name,
                         chapter_title=chapter.title,
+                        progress_callback=file_progress,
                     )
 
                     # Add ComicInfo.xml metadata
