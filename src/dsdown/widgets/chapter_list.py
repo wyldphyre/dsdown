@@ -83,11 +83,16 @@ class ChapterList(Vertical):
         yield Label("Unprocessed Chapters (0)", id="chapter-list-header")
         yield ListView(id="chapter-listview")
 
-    def update_chapters(self, chapters_by_date: dict[date | None, list[Chapter]]) -> None:
+    def update_chapters(
+        self,
+        chapters_by_date: dict[date | None, list[Chapter]],
+        restore_index: int | None = None,
+    ) -> None:
         """Update the displayed chapters.
 
         Args:
             chapters_by_date: Chapters grouped by release date.
+            restore_index: Optional index to restore highlight to after update.
         """
         try:
             self._chapters_by_date = chapters_by_date
@@ -126,8 +131,49 @@ class ChapterList(Vertical):
                             listview.append(ChapterItem(chapter))
                 except Exception:
                     pass
+
+            # Restore highlight if requested (outside batch_update)
+            if restore_index is not None:
+                self._pending_restore_index = restore_index
+                self.set_timer(0.2, self._do_restore_highlight)
         except Exception:
             pass
+
+    def _do_restore_highlight(self) -> None:
+        """Restore highlight after refresh."""
+        try:
+            index = getattr(self, "_pending_restore_index", None)
+            if index is None:
+                return
+            listview = self.query_one("#chapter-listview", ListView)
+            child_count = len(listview.children)
+            if child_count == 0:
+                return
+            # Clamp to valid range
+            valid_index = min(index, child_count - 1)
+            # Skip disabled items (date headers) - search forward first
+            while valid_index < child_count:
+                item = listview.children[valid_index]
+                if isinstance(item, ChapterItem):
+                    break
+                valid_index += 1
+            # If we went past the end, search backwards
+            if valid_index >= child_count:
+                valid_index = min(index, child_count - 1)
+                while valid_index >= 0:
+                    item = listview.children[valid_index]
+                    if isinstance(item, ChapterItem):
+                        break
+                    valid_index -= 1
+            if valid_index >= 0:
+                # Focus first to ensure the listview is active
+                listview.focus()
+                # Set the index to move the highlight
+                listview.index = valid_index
+        except Exception as e:
+            self.app.notify(f"Restore error: {e}", severity="error", timeout=10)
+        finally:
+            self._pending_restore_index = None
 
     def get_selected_chapter(self) -> Chapter | None:
         """Get the currently selected chapter."""
@@ -157,19 +203,20 @@ class ChapterList(Vertical):
         def do_restore() -> None:
             try:
                 listview = self.query_one("#chapter-listview", ListView)
-                if listview.child_count == 0:
+                child_count = len(listview.children)
+                if child_count == 0:
                     return
                 # Clamp to valid range
-                valid_index = min(index, listview.child_count - 1)
-                # Skip disabled items (date headers)
-                while valid_index < listview.child_count:
+                valid_index = min(index, child_count - 1)
+                # Skip disabled items (date headers) - search forward first
+                while valid_index < child_count:
                     item = listview.children[valid_index]
                     if isinstance(item, ChapterItem):
                         break
                     valid_index += 1
                 # If we went past the end, search backwards
-                if valid_index >= listview.child_count:
-                    valid_index = min(index, listview.child_count - 1)
+                if valid_index >= child_count:
+                    valid_index = min(index, child_count - 1)
                     while valid_index >= 0:
                         item = listview.children[valid_index]
                         if isinstance(item, ChapterItem):
@@ -177,10 +224,11 @@ class ChapterList(Vertical):
                         valid_index -= 1
                 if valid_index >= 0:
                     listview.index = valid_index
+                    listview.focus()
             except Exception:
                 pass
 
-        self.set_timer(0.1, do_restore)
+        self.set_timer(0.15, do_restore)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle chapter selection."""

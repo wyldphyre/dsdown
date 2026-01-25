@@ -244,13 +244,17 @@ class MainScreen(Screen):
         except Exception as e:
             self._set_status(f"Refresh error: {e}")
 
-    def _refresh_chapters(self) -> None:
-        """Refresh the chapter list."""
+    def _refresh_chapters(self, restore_index: int | None = None) -> None:
+        """Refresh the chapter list.
+
+        Args:
+            restore_index: Optional index to restore highlight to after update.
+        """
         try:
             chapters_by_date = self._chapter_service.get_chapters_by_date()
             try:
                 chapter_list = self.query_one(ChapterList)
-                chapter_list.update_chapters(chapters_by_date)
+                chapter_list.update_chapters(chapters_by_date, restore_index)
             except Exception:
                 pass
         except Exception:
@@ -443,11 +447,11 @@ class MainScreen(Screen):
                     self._chapter_service.mark_processed(ch)
 
             self._set_status(f"Ignored series: {series_name}")
-            self._refresh_all()
 
-            # Restore selection to the next chapter
-            if current_index is not None:
-                chapter_list.restore_highlight(current_index)
+            # Refresh with restored selection
+            self._refresh_chapters(current_index)
+            self._refresh_queue()
+            self._refresh_series()
         except Exception as e:
             self._set_status(f"Error: {e}")
 
@@ -496,11 +500,11 @@ class MainScreen(Screen):
                             self._chapter_service.mark_processed(ch)
 
                     self._set_status(f"Following series: {series_name}")
-                    self._refresh_all()
 
-                    # Restore selection to the next chapter
-                    if current_index is not None:
-                        chapter_list.restore_highlight(current_index)
+                    # Refresh with restored selection
+                    self._refresh_chapters(current_index)
+                    self._refresh_queue()
+                    self._refresh_series()
                 except Exception as e:
                     self._set_status(f"Error: {e}")
 
@@ -573,11 +577,11 @@ class MainScreen(Screen):
             title = chapter.title
             self._chapter_service.mark_processed(chapter)
             self._set_status(f"Processed: {title}")
-            self._refresh_all()
 
-            # Restore selection to the next chapter
-            if current_index is not None:
-                chapter_list.restore_highlight(current_index)
+            # Refresh with restored selection
+            self._refresh_chapters(current_index)
+            self._refresh_queue()
+            self._refresh_series()
         except Exception as e:
             self._set_status(f"Error: {e}")
 
@@ -596,11 +600,11 @@ class MainScreen(Screen):
             self._download_service.add_to_queue(chapter)
             self._chapter_service.mark_processed(chapter)
             self._set_status(f"Queued: {title}")
-            self._refresh_all()
 
-            # Restore selection to the next chapter
-            if current_index is not None:
-                chapter_list.restore_highlight(current_index)
+            # Refresh with restored selection
+            self._refresh_chapters(current_index)
+            self._refresh_queue()
+            self._refresh_series()
         except Exception as e:
             self._set_status(f"Error: {e}")
 
