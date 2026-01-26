@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import re
+import subprocess
+import tempfile
+import zipfile
 from pathlib import Path
 
 import httpx
@@ -142,6 +145,81 @@ class DynastyClient:
             result = result.replace(char, '_')
         return result.strip()
 
+    def _ensure_zip_archive(self, file_path: Path) -> Path:
+        """Ensure the file is a valid zip archive, converting if necessary.
+
+        If the file is not a valid zip, attempts to extract it and recompress as zip.
+
+        Args:
+            file_path: Path to the downloaded file.
+
+        Returns:
+            Path to the (possibly converted) zip archive.
+        """
+        # Check if it's already a valid zip
+        if zipfile.is_zipfile(file_path):
+            return file_path
+
+        # Not a zip - try to extract and recompress
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            extract_dir = temp_path / "extract"
+            extract_dir.mkdir()
+
+            # Try different extraction methods
+            extracted = False
+
+            # Try unrar for RAR files
+            if not extracted:
+                try:
+                    result = subprocess.run(
+                        ["unrar", "x", "-y", str(file_path), str(extract_dir) + "/"],
+                        capture_output=True,
+                        timeout=120,
+                    )
+                    if result.returncode == 0 and any(extract_dir.iterdir()):
+                        extracted = True
+                except (subprocess.SubprocessError, FileNotFoundError):
+                    pass
+
+            # Try 7z for various formats
+            if not extracted:
+                try:
+                    result = subprocess.run(
+                        ["7z", "x", f"-o{extract_dir}", "-y", str(file_path)],
+                        capture_output=True,
+                        timeout=120,
+                    )
+                    if result.returncode == 0 and any(extract_dir.iterdir()):
+                        extracted = True
+                except (subprocess.SubprocessError, FileNotFoundError):
+                    pass
+
+            if not extracted:
+                # Could not extract - return as-is
+                return file_path
+
+            # Collect all extracted files
+            files_to_zip: list[tuple[Path, str]] = []
+            for item in extract_dir.rglob("*"):
+                if item.is_file():
+                    # Use relative path from extract_dir
+                    rel_path = item.relative_to(extract_dir)
+                    files_to_zip.append((item, str(rel_path)))
+
+            if not files_to_zip:
+                return file_path
+
+            # Sort files for consistent ordering
+            files_to_zip.sort(key=lambda x: x[1])
+
+            # Create new zip archive
+            with zipfile.ZipFile(file_path, 'w', zipfile.ZIP_STORED) as zf:
+                for src_path, arc_name in files_to_zip:
+                    zf.write(src_path, arc_name)
+
+        return file_path
+
     async def download_chapter(
         self,
         chapter_url: str,
@@ -228,6 +306,9 @@ class DynastyClient:
                     downloaded += len(chunk)
                     if progress_callback and total_size:
                         progress_callback(downloaded, total_size)
+
+            # Ensure the file is a valid zip archive
+            file_path = self._ensure_zip_archive(file_path)
 
             return file_path
 
