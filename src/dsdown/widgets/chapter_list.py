@@ -7,7 +7,7 @@ from datetime import date
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.message import Message
-from textual.widgets import Label, ListItem, ListView, Static
+from textual.widgets import ListItem, ListView, Static
 
 from dsdown.models.chapter import Chapter
 
@@ -80,7 +80,6 @@ class ChapterList(Vertical):
 
     def compose(self) -> ComposeResult:
         """Compose the chapter list."""
-        yield Label("Unprocessed Chapters (0)", id="chapter-list-header")
         yield ListView(id="chapter-listview")
 
     def update_chapters(
@@ -104,13 +103,6 @@ class ChapterList(Vertical):
 
             # Use batch_update to prevent intermediate renders
             with self.app.batch_update():
-                # Update header
-                try:
-                    header = self.query_one("#chapter-list-header", Label)
-                    header.update(f"Unprocessed Chapters ({len(self._chapters)})")
-                except Exception:
-                    pass
-
                 # Update list view
                 try:
                     listview = self.query_one("#chapter-listview", ListView)

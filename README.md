@@ -4,11 +4,15 @@ A terminal user interface (TUI) for managing and downloading manga chapters from
 
 ## Features
 
+- **Tabbed interface** with Unprocessed, Followed, and Ignored tabs
 - **Fetch new chapters** from the releases page
 - **Follow series** to automatically queue new chapters for download
 - **Ignore series** to automatically skip unwanted content
 - **Download queue** with rate limiting (8 downloads per 24 hours)
 - **ComicInfo.xml metadata** automatically added to downloaded CBZ files
+- **Volume detection** from series pages for proper file naming
+- **Archive conversion** - automatically converts RAR/7z to CBZ
+- **Configurable filenames** - optionally exclude series name from downloads
 - **Keyboard-driven interface** for efficient workflow
 
 ## Installation
@@ -50,8 +54,9 @@ Configuration and data are stored in `~/.config/dsdown/`:
 - Files are saved as CBZ archives
 - ComicInfo.xml metadata is automatically embedded with:
   - Series name
+  - Volume number
   - Chapter number
-  - Title
+  - Title/subtitle
   - Authors
   - Tags
   - Release date

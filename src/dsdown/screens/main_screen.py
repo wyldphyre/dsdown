@@ -6,13 +6,14 @@ import webbrowser
 from pathlib import Path
 
 from textual.app import ComposeResult
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container, Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, Header, ListView, Static
+from textual.widgets import Footer, Header, Label, ListItem, ListView, TabbedContent, TabPane
 
 from dsdown.config import DYNASTY_BASE_URL
 from dsdown.models.chapter import Chapter
 from dsdown.models.database import get_session, init_db
+from dsdown.models.series import Series
 from dsdown.screens.confirm_dialog import ConfirmDialog
 from dsdown.screens.follow_dialog import FollowDialog, FollowDialogResult
 from dsdown.services.chapter_service import ChapterService
@@ -20,8 +21,18 @@ from dsdown.services.download_service import DownloadService
 from dsdown.services.series_service import SeriesService
 from dsdown.widgets.chapter_list import ChapterList
 from dsdown.widgets.download_queue import DownloadQueueWidget
-from dsdown.widgets.series_panel import SeriesPanel
 from dsdown.widgets.status_bar import StatusBar
+
+
+class SeriesListItem(ListItem):
+    """A series item for the followed/ignored lists."""
+
+    def __init__(self, series: Series) -> None:
+        super().__init__()
+        self.series = series
+
+    def compose(self) -> ComposeResult:
+        yield Label(f"* {self.series.name}", classes="series-name")
 
 
 class MainScreen(Screen):
@@ -50,7 +61,6 @@ class MainScreen(Screen):
 
     #left-panel {
         row-span: 1;
-        border: solid $primary;
         height: 100%;
         min-height: 10;
     }
@@ -69,16 +79,26 @@ class MainScreen(Screen):
         padding: 0 1;
     }
 
+    TabbedContent {
+        height: 100%;
+    }
+
+    ContentSwitcher {
+        height: 1fr;
+    }
+
+    TabPane {
+        height: 100%;
+        padding: 0;
+    }
+
+    TabPane > ListView {
+        height: 100%;
+    }
+
     ChapterList {
         height: 100%;
         min-height: 5;
-    }
-
-    #chapter-list-header {
-        text-style: bold;
-        padding: 0 1;
-        background: $accent;
-        height: 1;
     }
 
     #chapter-listview {
@@ -119,10 +139,7 @@ class MainScreen(Screen):
     }
 
     DownloadQueueWidget {
-        height: auto;
-        max-height: 40%;
-        min-height: 4;
-        border-bottom: solid $secondary;
+        height: 100%;
     }
 
     #queue-header {
@@ -133,8 +150,7 @@ class MainScreen(Screen):
     }
 
     #queue-listview {
-        height: auto;
-        max-height: 10;
+        height: 1fr;
         min-height: 1;
     }
 
@@ -150,22 +166,9 @@ class MainScreen(Screen):
         height: 1;
     }
 
-    SeriesPanel {
-        height: 1fr;
-        min-height: 5;
-    }
-
-    #followed-header, #ignored-header {
-        text-style: bold;
-        padding: 0 1;
-        background: $accent;
-        height: 1;
-    }
-
     #followed-listview, #ignored-listview {
-        height: auto;
-        max-height: 10;
-        min-height: 1;
+        height: 1fr;
+        min-height: 3;
     }
 
     .series-name {
@@ -199,11 +202,7 @@ class MainScreen(Screen):
         """Check if an action should be shown/enabled."""
         if action == "unfollow":
             # Only show unfollow when followed series list has focus
-            try:
-                series_panel = self.query_one(SeriesPanel)
-                return series_panel.get_highlighted_followed_series() is not None
-            except Exception:
-                return False
+            return self._get_highlighted_followed_series() is not None
         return True
 
     def compose(self) -> ComposeResult:
@@ -211,11 +210,16 @@ class MainScreen(Screen):
         yield Header()
 
         with Container(id="left-panel"):
-            yield ChapterList()
+            with TabbedContent():
+                with TabPane("Unprocessed", id="unprocessed-tab"):
+                    yield ChapterList()
+                with TabPane("Followed", id="followed-tab"):
+                    yield ListView(id="followed-listview")
+                with TabPane("Ignored", id="ignored-tab"):
+                    yield ListView(id="ignored-listview")
 
         with Vertical(id="right-panel"):
             yield DownloadQueueWidget()
-            yield SeriesPanel()
 
         with Container(id="status-panel"):
             yield StatusBar()
@@ -231,8 +235,8 @@ class MainScreen(Screen):
         self._series_service = SeriesService(self._session)
         self._download_service = DownloadService(self._session)
 
-        # Load initial data
-        self._refresh_all()
+        # Load initial data with a small delay to ensure widgets are ready
+        self.set_timer(0.1, self._refresh_all)
 
     def _refresh_all(self) -> None:
         """Refresh all widgets with current data."""
@@ -247,6 +251,8 @@ class MainScreen(Screen):
                 self._refresh_chapters()
                 self._refresh_queue()
                 self._refresh_series()
+            # Force tab bar to refresh after batch_update completes
+            self._refresh_tab_labels()
         except Exception as e:
             self._set_status(f"Refresh error: {e}")
 
@@ -258,9 +264,13 @@ class MainScreen(Screen):
         """
         try:
             chapters_by_date = self._chapter_service.get_chapters_by_date()
+            total_count = sum(len(chapters) for chapters in chapters_by_date.values())
             try:
                 chapter_list = self.query_one(ChapterList)
                 chapter_list.update_chapters(chapters_by_date, restore_index)
+
+                # Update the tab label with count
+                self._update_tab_label("unprocessed-tab", f"Unprocessed ({total_count})")
             except Exception:
                 pass
         except Exception:
@@ -280,7 +290,7 @@ class MainScreen(Screen):
             pass  # Silently ignore refresh errors
 
     def _refresh_series(self, restore_followed_id: int | None = None) -> None:
-        """Refresh the series panel.
+        """Refresh the followed and ignored series lists.
 
         Args:
             restore_followed_id: Optional series ID to restore highlight to.
@@ -288,9 +298,44 @@ class MainScreen(Screen):
         try:
             followed = self._series_service.get_followed_series()
             ignored = self._series_service.get_ignored_series()
+            restore_index = None
 
-            series_panel = self.query_one(SeriesPanel)
-            series_panel.update_series(followed, ignored, restore_followed_id)
+            # Update followed list
+            try:
+                followed_list = self.query_one("#followed-listview", ListView)
+                followed_list.clear()
+                for i, series in enumerate(followed):
+                    followed_list.append(SeriesListItem(series))
+                    if restore_followed_id and series.id == restore_followed_id:
+                        restore_index = i
+
+                # Update the tab label with count
+                self._update_tab_label("followed-tab", f"Followed ({len(followed)})")
+            except Exception:
+                pass
+
+            # Update ignored list
+            try:
+                ignored_list = self.query_one("#ignored-listview", ListView)
+                ignored_list.clear()
+                for series in ignored:
+                    ignored_list.append(SeriesListItem(series))
+
+                # Update the tab label with count
+                self._update_tab_label("ignored-tab", f"Ignored ({len(ignored)})")
+            except Exception:
+                pass
+
+            # Restore highlight after update
+            if restore_index is not None:
+                def do_restore() -> None:
+                    try:
+                        lv = self.query_one("#followed-listview", ListView)
+                        lv.index = restore_index
+                        lv.focus()
+                    except Exception:
+                        pass
+                self.set_timer(0.1, do_restore)
         except Exception:
             pass  # Silently ignore refresh errors
 
@@ -298,6 +343,70 @@ class MainScreen(Screen):
         """Set the status bar message."""
         status_bar = self.query_one(StatusBar)
         status_bar.set_message(message)
+
+    def _update_tab_label(self, pane_id: str, label: str) -> None:
+        """Update a tab's label by pane ID.
+
+        Args:
+            pane_id: The ID of the TabPane (e.g., "followed-tab").
+            label: The new label text.
+        """
+        try:
+            tabbed = self.query_one(TabbedContent)
+            tab = tabbed.get_tab(pane_id)
+            tab.label = label
+        except Exception:
+            pass
+
+    def _refresh_tab_labels(self) -> None:
+        """Force refresh of the tab bar to show updated labels."""
+        try:
+            tabbed = self.query_one(TabbedContent)
+            # Refresh the Tabs container (the tab bar)
+            tabs = tabbed.query_one("Tabs")
+            tabs.refresh()
+        except Exception:
+            pass
+
+    def _get_highlighted_followed_series(self) -> Series | None:
+        """Get the currently highlighted series in the followed list.
+
+        Returns:
+            The highlighted Series, or None if nothing is highlighted or
+            the followed list doesn't have focus.
+        """
+        try:
+            followed_list = self.query_one("#followed-listview", ListView)
+            if not followed_list.has_focus:
+                return None
+            if followed_list.index is None:
+                return None
+            item = followed_list.highlighted_child
+            if isinstance(item, SeriesListItem):
+                return item.series
+        except Exception:
+            pass
+        return None
+
+    def _get_highlighted_ignored_series(self) -> Series | None:
+        """Get the currently highlighted series in the ignored list.
+
+        Returns:
+            The highlighted Series, or None if nothing is highlighted or
+            the ignored list doesn't have focus.
+        """
+        try:
+            ignored_list = self.query_one("#ignored-listview", ListView)
+            if not ignored_list.has_focus:
+                return None
+            if ignored_list.index is None:
+                return None
+            item = ignored_list.highlighted_child
+            if isinstance(item, SeriesListItem):
+                return item.series
+        except Exception:
+            pass
+        return None
 
     def on_chapter_list_chapter_highlighted(self, event: ChapterList.ChapterHighlighted) -> None:
         """Handle chapter highlight."""
@@ -317,17 +426,17 @@ class MainScreen(Screen):
         # Open the chapter in browser on selection
         self._open_chapter(event.chapter)
 
-    def on_series_panel_series_selected(self, event: SeriesPanel.SeriesSelected) -> None:
-        """Handle series selection.
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        """Handle selection in list views (followed/ignored series)."""
+        if not isinstance(event.item, SeriesListItem):
+            return
 
-        - For followed series: edit download path settings
-        - For ignored series: unignore the series
-        """
-        series = event.series
+        series = event.item.series
         series_id = series.id
         series_name = series.name
 
-        if series.is_ignored:
+        # Check which list this is from
+        if event.list_view.id == "ignored-listview":
             # Confirm before unignoring
             def handle_unignore_confirm(confirmed: bool) -> None:
                 if not confirmed:
@@ -348,43 +457,41 @@ class MainScreen(Screen):
             )
             return
 
-        if not series.is_followed:
-            return  # Series has no status, nothing to do
+        if event.list_view.id == "followed-listview":
+            # Edit followed series settings
+            existing_path = Path(series.download_path) if series.download_path else None
+            include_series = series.include_series_in_filename
 
-        # Edit followed series settings
-        existing_path = Path(series.download_path) if series.download_path else None
-        include_series = series.include_series_in_filename
+            def handle_edit_result(result: FollowDialogResult | None) -> None:
+                """Handle the result from the edit dialog."""
+                try:
+                    if result is None:
+                        self._set_status("Edit cancelled")
+                        # Still restore selection on cancel
+                        self._refresh_series(series_id)
+                        return
 
-        def handle_edit_result(result: FollowDialogResult | None) -> None:
-            """Handle the result from the edit dialog."""
-            try:
-                if result is None:
-                    self._set_status("Edit cancelled")
-                    # Still restore selection on cancel
+                    # Re-fetch the series from the database
+                    fresh_series = self._series_service.get_series_by_id(series_id)
+                    if not fresh_series:
+                        self._set_status("Series not found")
+                        return
+
+                    # Update the settings
+                    fresh_series.download_path = str(result.path)
+                    fresh_series.include_series_in_filename = result.include_series_in_filename
+                    self._series_service.session.commit()
+
+                    self._set_status(f"Updated settings for: {series_name}")
                     self._refresh_series(series_id)
-                    return
+                except Exception as e:
+                    self._set_status(f"Error: {e}")
 
-                # Re-fetch the series from the database
-                fresh_series = self._series_service.get_series_by_id(series_id)
-                if not fresh_series:
-                    self._set_status("Series not found")
-                    return
-
-                # Update the settings
-                fresh_series.download_path = str(result.path)
-                fresh_series.include_series_in_filename = result.include_series_in_filename
-                self._series_service.session.commit()
-
-                self._set_status(f"Updated settings for: {series_name}")
-                self._refresh_series(series_id)
-            except Exception as e:
-                self._set_status(f"Error: {e}")
-
-        # Show dialog with existing settings
-        self.app.push_screen(
-            FollowDialog(series_name, existing_path, include_series),
-            handle_edit_result,
-        )
+            # Show dialog with existing settings
+            self.app.push_screen(
+                FollowDialog(series_name, existing_path, include_series),
+                handle_edit_result,
+            )
 
     def _get_selected_chapter(self) -> Chapter | None:
         """Get the currently selected chapter, refreshed from the database."""
@@ -522,8 +629,7 @@ class MainScreen(Screen):
     def action_unfollow(self) -> None:
         """Unfollow the currently highlighted followed series."""
         try:
-            series_panel = self.query_one(SeriesPanel)
-            series = series_panel.get_highlighted_followed_series()
+            series = self._get_highlighted_followed_series()
             if not series:
                 self._set_status("No followed series selected")
                 return

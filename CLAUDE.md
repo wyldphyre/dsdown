@@ -19,7 +19,6 @@ src/dsdown/
 │   └── confirm_dialog.py   # Generic confirmation dialog
 ├── widgets/            # Textual widgets
 │   ├── chapter_list.py     # Unprocessed chapters list (grouped by date)
-│   ├── series_panel.py     # Followed/ignored series lists
 │   ├── download_queue.py   # Download queue display
 │   └── status_bar.py       # Status bar with keybindings
 ├── services/           # Business logic
@@ -35,10 +34,11 @@ src/dsdown/
 
 ## Key Concepts
 
-- **Chapters**: Individual releases from dynasty-scans.com with title, URL, tags, authors, and release date
+- **Chapters**: Individual releases from dynasty-scans.com with title, URL, tags, authors, volume, and release date
 - **Series**: A collection of chapters that can be followed (auto-download) or ignored (auto-skip)
 - **Download Queue**: Rate-limited queue (8 downloads per 24 hours)
 - **ComicInfo.xml**: CBZ metadata following the v2.1 spec
+- **Tabbed UI**: Main screen uses TabbedContent with Unprocessed/Followed/Ignored tabs
 
 ## Keybindings (Main Screen)
 
@@ -50,7 +50,7 @@ src/dsdown/
 - `q` - Queue chapter for download
 - `s` - Start processing download queue
 - `o` - Open chapter URL in browser
-- `Enter` - On ignored series: unignore it
+- `Enter` - On followed series: edit settings; On ignored series: unignore it
 - `?` - Help
 - `Escape` - Quit
 
