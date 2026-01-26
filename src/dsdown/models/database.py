@@ -65,3 +65,11 @@ def _run_migrations(engine: Engine) -> None:
                     )
                 )
                 conn.commit()
+
+    # Migration: Add volume column to chapters table
+    if "chapters" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("chapters")]
+        if "volume" not in columns:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE chapters ADD COLUMN volume INTEGER"))
+                conn.commit()

@@ -14,7 +14,8 @@ from dsdown.models.chapter import Chapter
 from dsdown.models.database import get_session
 from dsdown.models.download import DownloadHistory, DownloadQueue, DownloadStatus
 from dsdown.scraper.client import DynastyClient
-from dsdown.services.comicinfo import add_comicinfo_to_cbz
+from dsdown.scraper.series_parser import get_chapter_volumes
+from dsdown.services.comicinfo import add_comicinfo_to_cbz, extract_title_without_chapter
 
 
 class DownloadService:
@@ -148,6 +149,34 @@ class DownloadService:
         self.session.commit()
         return history
 
+    async def _fetch_volume_info(self, chapter: Chapter, client: DynastyClient) -> None:
+        """Fetch and set volume information for a chapter from its series page.
+
+        Args:
+            chapter: The chapter to get volume info for.
+            client: The HTTP client to use.
+        """
+        # Skip if already has volume info or no series
+        if chapter.volume is not None or not chapter.series:
+            return
+
+        try:
+            series_url = chapter.series.url
+            if not series_url:
+                return
+
+            # Fetch and parse series page
+            series_html = await client.get_series_page(series_url)
+            chapter_volumes = get_chapter_volumes(series_html)
+
+            # Look up this chapter's volume
+            if chapter.url in chapter_volumes:
+                chapter.volume = chapter_volumes[chapter.url]
+                self.session.commit()
+        except Exception:
+            # Silently ignore errors fetching volume info
+            pass
+
     async def process_queue(
         self,
         progress_callback: callable | None = None,
@@ -206,6 +235,9 @@ class DownloadService:
                 self.session.commit()
 
                 try:
+                    # Fetch volume info from series page if not already set
+                    await self._fetch_volume_info(chapter, client)
+
                     # Get download path from series or use default
                     if chapter.series and chapter.series.download_path:
                         destination = Path(chapter.series.download_path)
@@ -223,6 +255,9 @@ class DownloadService:
                     )
                     series_name = chapter.series.name if chapter.series and include_series else None
 
+                    # Get subtitle for filename
+                    subtitle = extract_title_without_chapter(chapter.title, series_name)
+
                     # Create file progress callback
                     def file_progress(downloaded: int, total: int) -> None:
                         if download_progress_callback:
@@ -233,6 +268,8 @@ class DownloadService:
                         destination,
                         series_name=series_name,
                         chapter_title=chapter.title,
+                        volume=chapter.volume,
+                        subtitle=subtitle,
                         progress_callback=file_progress,
                     )
 
@@ -316,11 +353,19 @@ class DownloadService:
             )
             series_name = chapter.series.name if chapter.series and include_series else None
             async with DynastyClient() as client:
+                # Fetch volume info from series page if not already set
+                await self._fetch_volume_info(chapter, client)
+
+                # Get subtitle for filename
+                subtitle = extract_title_without_chapter(chapter.title, series_name)
+
                 cbz_path = await client.download_chapter(
                     chapter.url,
                     destination,
                     series_name=series_name,
                     chapter_title=chapter.title,
+                    volume=chapter.volume,
+                    subtitle=subtitle,
                 )
 
             # Add ComicInfo.xml metadata

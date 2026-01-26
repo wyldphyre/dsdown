@@ -82,6 +82,24 @@ class DynastyClient:
         response.raise_for_status()
         return response.text
 
+    async def get_series_page(self, series_url: str) -> str:
+        """Fetch a series page.
+
+        Args:
+            series_url: The series URL path (e.g., '/series/some_series').
+
+        Returns:
+            HTML content of the page.
+        """
+        if series_url.startswith("/"):
+            url = f"{DYNASTY_BASE_URL}{series_url}"
+        else:
+            url = series_url
+
+        response = await self.client.get(url)
+        response.raise_for_status()
+        return response.text
+
     def _extract_chapter_number(self, title: str) -> str | None:
         """Extract chapter number from a chapter title.
 
@@ -130,6 +148,8 @@ class DynastyClient:
         destination: Path,
         series_name: str | None = None,
         chapter_title: str | None = None,
+        volume: int | None = None,
+        subtitle: str | None = None,
         progress_callback: callable | None = None,
     ) -> Path:
         """Download a chapter archive.
@@ -139,6 +159,8 @@ class DynastyClient:
             destination: Directory to save the downloaded file.
             series_name: Optional series name for filename formatting.
             chapter_title: Optional chapter title for extracting chapter number.
+            volume: Optional volume number.
+            subtitle: Optional chapter subtitle/name.
             progress_callback: Optional callback for progress updates.
 
         Returns:
@@ -159,7 +181,15 @@ class DynastyClient:
                 # Extract chapter number from title
                 chapter_num = self._extract_chapter_number(chapter_title)
                 if chapter_num:
-                    filename = f"{self._sanitize_filename(series_name)} ch{chapter_num}.cbz"
+                    # Build filename: <SeriesName> v<Vol> ch<Num> - <Title>.cbz
+                    parts = [self._sanitize_filename(series_name)]
+                    if volume is not None:
+                        parts.append(f"v{volume}")
+                    parts.append(f"ch{chapter_num}")
+                    filename = " ".join(parts)
+                    if subtitle:
+                        filename += f" - {self._sanitize_filename(subtitle)}"
+                    filename += ".cbz"
                 else:
                     # No chapter number found, use slug from URL
                     slug = chapter_url.rstrip("/").split("/")[-1]
@@ -212,3 +242,9 @@ async def fetch_chapter_page(chapter_url: str) -> str:
     """Convenience function to fetch a chapter page."""
     async with DynastyClient() as client:
         return await client.get_chapter_page(chapter_url)
+
+
+async def fetch_series_page(series_url: str) -> str:
+    """Convenience function to fetch a series page."""
+    async with DynastyClient() as client:
+        return await client.get_series_page(series_url)

@@ -97,6 +97,11 @@ def generate_comicinfo_xml(chapter: Chapter, page_count: int | None = None) -> s
         number_elem = ET.SubElement(root, "Number")
         number_elem.text = chapter_num
 
+    # Volume
+    if chapter.volume is not None:
+        volume_elem = ET.SubElement(root, "Volume")
+        volume_elem.text = str(chapter.volume)
+
     # Title (the subtitle/name portion after chapter number)
     series_name = chapter.series.name if chapter.series else None
     subtitle = extract_title_without_chapter(chapter.title, series_name)

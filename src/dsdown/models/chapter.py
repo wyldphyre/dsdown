@@ -6,7 +6,7 @@ import json
 from datetime import date, datetime
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from dsdown.models.database import Base
@@ -26,6 +26,7 @@ class Chapter(Base):
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     series_id: Mapped[Optional[int]] = mapped_column(ForeignKey("series.id"), nullable=True)
     release_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    volume: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     authors_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     tags_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     processed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
