@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.message import Message
@@ -21,8 +22,6 @@ class ChapterItem(ListItem):
 
     def compose(self) -> ComposeResult:
         """Compose the chapter item content."""
-        from rich.text import Text
-
         content = Text()
 
         # Title (bold)

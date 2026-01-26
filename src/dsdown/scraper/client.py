@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import re
 import subprocess
 import tempfile
 import zipfile
@@ -12,6 +10,7 @@ from pathlib import Path
 import httpx
 
 from dsdown.config import DYNASTY_BASE_URL, DYNASTY_RELEASES_URL
+from dsdown.utils import extract_chapter_number, sanitize_filename
 
 # Default headers to mimic a browser
 DEFAULT_HEADERS = {
@@ -102,48 +101,6 @@ class DynastyClient:
         response = await self.client.get(url)
         response.raise_for_status()
         return response.text
-
-    def _extract_chapter_number(self, title: str) -> str | None:
-        """Extract chapter number from a chapter title.
-
-        Args:
-            title: The chapter title (e.g., 'Series Name ch001' or 'Chapter 15').
-
-        Returns:
-            The chapter number as a string, or None if not found.
-        """
-        # Common patterns for chapter numbers
-        patterns = [
-            r'\bch\.?\s*(\d+(?:\.\d+)?)',  # ch1, ch.1, ch 1, ch01
-            r'\bchapter\s*(\d+(?:\.\d+)?)',  # chapter 1, chapter01
-            r'\bc(\d+(?:\.\d+)?)\b',  # c1, c01 (standalone)
-            r'#(\d+(?:\.\d+)?)',  # #1, #01
-            r'\b(\d+(?:\.\d+)?)\s*$',  # trailing number
-        ]
-
-        title_lower = title.lower()
-        for pattern in patterns:
-            match = re.search(pattern, title_lower, re.IGNORECASE)
-            if match:
-                return match.group(1)
-
-        return None
-
-    def _sanitize_filename(self, name: str) -> str:
-        """Sanitize a string for use as a filename.
-
-        Args:
-            name: The string to sanitize.
-
-        Returns:
-            A filename-safe string.
-        """
-        # Remove or replace characters that are problematic in filenames
-        invalid_chars = '<>:"/\\|?*'
-        result = name
-        for char in invalid_chars:
-            result = result.replace(char, '_')
-        return result.strip()
 
     def _ensure_zip_archive(self, file_path: Path) -> Path:
         """Ensure the file is a valid zip archive, converting if necessary.
@@ -257,21 +214,21 @@ class DynastyClient:
             # Determine the filename
             if series_name and chapter_title:
                 # Extract chapter number from title
-                chapter_num = self._extract_chapter_number(chapter_title)
+                chapter_num = extract_chapter_number(chapter_title)
                 if chapter_num:
                     # Build filename: <SeriesName> v<Vol> ch<Num> - <Title>.cbz
-                    parts = [self._sanitize_filename(series_name)]
+                    parts = [sanitize_filename(series_name)]
                     if volume is not None:
                         parts.append(f"v{volume}")
                     parts.append(f"ch{chapter_num}")
                     filename = " ".join(parts)
                     if subtitle:
-                        filename += f" - {self._sanitize_filename(subtitle)}"
+                        filename += f" - {sanitize_filename(subtitle)}"
                     filename += ".cbz"
                 else:
                     # No chapter number found, use slug from URL
                     slug = chapter_url.rstrip("/").split("/")[-1]
-                    filename = f"{self._sanitize_filename(series_name)} - {slug}.cbz"
+                    filename = f"{sanitize_filename(series_name)} - {slug}.cbz"
             else:
                 # Fallback: try Content-Disposition header
                 content_disposition = response.headers.get("content-disposition", "")

@@ -8,32 +8,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from dsdown.models.chapter import Chapter
-
-
-def extract_chapter_number(title: str) -> str | None:
-    """Extract chapter number from a chapter title.
-
-    Args:
-        title: The chapter title (e.g., 'Series Name ch001' or 'Chapter 15').
-
-    Returns:
-        The chapter number as a string, or None if not found.
-    """
-    patterns = [
-        r"\bch\.?\s*(\d+(?:\.\d+)?)",  # ch1, ch.1, ch 1, ch01
-        r"\bchapter\s*(\d+(?:\.\d+)?)",  # chapter 1, chapter01
-        r"\bc(\d+(?:\.\d+)?)\b",  # c1, c01 (standalone)
-        r"#(\d+(?:\.\d+)?)",  # #1, #01
-        r"\b(\d+(?:\.\d+)?)\s*$",  # trailing number
-    ]
-
-    title_lower = title.lower()
-    for pattern in patterns:
-        match = re.search(pattern, title_lower, re.IGNORECASE)
-        if match:
-            return match.group(1)
-
-    return None
+from dsdown.utils import extract_chapter_number
 
 
 def extract_title_without_chapter(title: str, series_name: str | None) -> str | None:

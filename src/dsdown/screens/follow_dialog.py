@@ -11,6 +11,8 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Checkbox, Input, Label, Static
 
+from dsdown.utils import sanitize_filename
+
 
 @dataclass
 class FollowDialogResult:
@@ -88,16 +90,7 @@ class FollowDialog(ModalScreen[Optional[FollowDialogResult]]):
         if existing_path:
             self._default_path = existing_path
         else:
-            self._default_path = Path.home() / "Downloads" / "dsdown" / self._sanitize_name(series_name)
-
-    def _sanitize_name(self, name: str) -> str:
-        """Sanitize a series name for use as a directory name."""
-        # Remove or replace characters that are problematic in filenames
-        invalid_chars = '<>:"/\\|?*'
-        result = name
-        for char in invalid_chars:
-            result = result.replace(char, "_")
-        return result.strip()
+            self._default_path = Path.home() / "Downloads" / "dsdown" / sanitize_filename(series_name)
 
     def compose(self) -> ComposeResult:
         """Compose the dialog."""

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
@@ -108,8 +108,6 @@ class ChapterService:
 
     def mark_downloaded(self, chapter: Chapter) -> None:
         """Mark a chapter as downloaded."""
-        from datetime import datetime
-
         chapter.downloaded = True
         chapter.download_timestamp = datetime.now()
         self.session.commit()
