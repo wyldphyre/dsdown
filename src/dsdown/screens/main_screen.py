@@ -26,6 +26,35 @@ from dsdown.widgets.download_queue import DownloadQueueWidget
 from dsdown.widgets.status_bar import StatusBar
 
 
+def _write_series_metadata_files(
+    folder: Path,
+    cover_image: bytes | None,
+    description: str | None,
+    tags: list[str] | None,
+) -> None:
+    """Write series metadata files to the series folder.
+
+    Args:
+        folder: The series download folder.
+        cover_image: Cover image data (written as cover.jpg).
+        description: Series description (written as description.txt).
+        tags: List of tags (written as tags.txt).
+    """
+    folder.mkdir(parents=True, exist_ok=True)
+
+    if cover_image:
+        cover_path = folder / "cover.jpg"
+        cover_path.write_bytes(cover_image)
+
+    if description:
+        desc_path = folder / "description.txt"
+        desc_path.write_text(description, encoding="utf-8")
+
+    if tags:
+        tags_path = folder / "tags.txt"
+        tags_path.write_text("\n".join(tags), encoding="utf-8")
+
+
 class SeriesListItem(ListItem):
     """A series item for the followed/ignored lists."""
 
@@ -693,6 +722,9 @@ class MainScreen(Screen):
                         tags,
                     )
 
+                    # Write metadata files to series folder
+                    _write_series_metadata_files(result.path, cover_image, description, tags)
+
                     # Queue all unprocessed chapters of this series
                     for ch in self._chapter_service.get_unprocessed_chapters():
                         if ch.series_id == series_id:
@@ -791,6 +823,12 @@ class MainScreen(Screen):
                 self._series_service.update_series_metadata(
                     fresh_series, description, cover_image, tags
                 )
+
+                # Write metadata files to series folder
+                if fresh_series.download_path:
+                    _write_series_metadata_files(
+                        Path(fresh_series.download_path), cover_image, description, tags
+                    )
 
                 # Update the series object in the current list item so panel shows new data
                 followed_list = self.query_one("#followed-listview", ListView)
