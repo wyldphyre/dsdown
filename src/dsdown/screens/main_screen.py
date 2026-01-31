@@ -22,7 +22,7 @@ from dsdown.services.chapter_service import ChapterService
 from dsdown.services.download_service import DownloadService
 from dsdown.services.series_service import SeriesService
 from dsdown.widgets.chapter_list import ChapterList
-from dsdown.widgets.download_queue import DownloadQueueWidget
+from dsdown.widgets.download_queue import DownloadQueueWidget, QueueItem
 from dsdown.widgets.status_bar import StatusBar
 
 
@@ -196,6 +196,14 @@ class MainScreen(Screen):
         padding: 0 1;
         color: $text-muted;
         height: 1;
+    }
+
+    QueueItem {
+        height: auto;
+    }
+
+    .queue-item-title {
+        width: 100%;
     }
 
     #followed-listview {
