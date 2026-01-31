@@ -68,6 +68,8 @@ class SeriesService:
         series: Series,
         download_path: Path,
         include_series_in_filename: bool = True,
+        description: str | None = None,
+        cover_image: bytes | None = None,
     ) -> None:
         """Mark a series as followed.
 
@@ -75,10 +77,35 @@ class SeriesService:
             series: The series to follow.
             download_path: The path to download chapters to.
             include_series_in_filename: Whether to include series name in downloaded filenames.
+            description: Optional series description/summary.
+            cover_image: Optional cover image data.
         """
         series.status = SeriesStatus.FOLLOWED.value
         series.download_path = str(download_path)
         series.include_series_in_filename = include_series_in_filename
+        if description is not None:
+            series.description = description
+        if cover_image is not None:
+            series.cover_image = cover_image
+        self.session.commit()
+
+    def update_series_metadata(
+        self,
+        series: Series,
+        description: str | None = None,
+        cover_image: bytes | None = None,
+    ) -> None:
+        """Update series metadata (description and cover image).
+
+        Args:
+            series: The series to update.
+            description: New description (None to keep existing).
+            cover_image: New cover image data (None to keep existing).
+        """
+        if description is not None:
+            series.description = description
+        if cover_image is not None:
+            series.cover_image = cover_image
         self.session.commit()
 
     def ignore_series(self, series: Series) -> None:

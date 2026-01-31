@@ -8,14 +8,13 @@ from bs4 import BeautifulSoup, Tag
 
 
 class SeriesPageParser:
-    """Parser for a series page to extract volume information.
+    """Parser for a series page to extract metadata.
 
-    Series pages may have chapters organized under volume headers like:
-    - Volume 1
-    - Volume 2
-    - etc.
-
-    This parser extracts which volume each chapter belongs to.
+    Extracts:
+    - Volume information (chapters organized under volume headers)
+    - Series name
+    - Description/summary
+    - Cover image URL
     """
 
     def __init__(self, html: str) -> None:
@@ -111,6 +110,47 @@ class SeriesPageParser:
             for b_tag in name_elem.find_all("b"):
                 b_tag.decompose()
             return name_elem.get_text(strip=True)
+        return None
+
+    def get_description(self) -> str | None:
+        """Get the series description/summary from the page.
+
+        Returns:
+            The description text or None if not found.
+        """
+        # Description is in a paragraph element within the tag-content-summary div
+        summary_div = self.soup.select_one(".tag-content-summary, .description, #description")
+        if summary_div:
+            # Get the text content
+            text = summary_div.get_text(strip=True)
+            if text:
+                return text
+
+        # Fallback: Look for paragraphs that appear to be descriptions
+        # (longer text blocks near the top of the page)
+        for p in self.soup.select("p"):
+            text = p.get_text(strip=True)
+            # Skip very short paragraphs or those that look like metadata
+            if len(text) > 100 and not text.startswith(("Tags:", "Author:", "Status:")):
+                return text
+
+        return None
+
+    def get_cover_image_url(self) -> str | None:
+        """Get the cover image URL from the page.
+
+        Returns:
+            The cover image URL or None if not found.
+        """
+        # Cover images are stored in /system/tag_contents_covers/
+        cover_img = self.soup.select_one('img[src*="tag_contents_covers"]')
+        if cover_img:
+            src = cover_img.get("src", "")
+            if src:
+                # Return the full URL if it's relative
+                if src.startswith("/"):
+                    return f"https://dynasty-scans.com{src}"
+                return src
         return None
 
 

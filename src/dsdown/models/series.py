@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Boolean, DateTime, String, func
+from sqlalchemy import Boolean, DateTime, LargeBinary, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from dsdown.models.database import Base
@@ -35,6 +35,8 @@ class Series(Base):
     include_series_in_filename: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False, server_default="1"
     )
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    cover_image: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False
     )

@@ -8,12 +8,14 @@ from pathlib import Path
 from textual.app import ComposeResult
 from textual.containers import Container, Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, Header, Label, ListItem, ListView, TabbedContent, TabPane
+from textual.widgets import Footer, Header, Label, ListItem, ListView, Static, TabbedContent, TabPane
 
 from dsdown.config import DYNASTY_BASE_URL
 from dsdown.models.chapter import Chapter
 from dsdown.models.database import get_session, init_db
 from dsdown.models.series import Series
+from dsdown.scraper.client import download_image, fetch_series_page
+from dsdown.scraper.series_parser import SeriesPageParser
 from dsdown.screens.confirm_dialog import ConfirmDialog
 from dsdown.screens.follow_dialog import FollowDialog, FollowDialogResult
 from dsdown.services.chapter_service import ChapterService
@@ -32,7 +34,7 @@ class SeriesListItem(ListItem):
         self.series = series
 
     def compose(self) -> ComposeResult:
-        yield Label(f"* {self.series.name}", classes="series-name")
+        yield Label(f"• {self.series.name}", classes="series-name")
 
 
 class MainScreen(Screen):
@@ -43,6 +45,7 @@ class MainScreen(Screen):
         ("i", "ignore", "Ignore"),
         ("w", "follow", "Follow"),
         ("u", "unfollow", "Unfollow"),
+        ("r", "refresh_metadata", "Refresh"),
         ("o", "open", "Open"),
         ("p", "process", "Process"),
         ("q", "queue", "Queue"),
@@ -166,13 +169,31 @@ class MainScreen(Screen):
         height: 1;
     }
 
-    #followed-listview, #ignored-listview {
+    #followed-listview {
+        height: 1fr;
+        min-height: 3;
+    }
+
+    #ignored-listview {
         height: 1fr;
         min-height: 3;
     }
 
     .series-name {
         padding-left: 1;
+    }
+
+    #series-detail-panel {
+        height: auto;
+        max-height: 12;
+        border-top: solid $primary;
+        padding: 1;
+        color: $text-muted;
+        display: none;
+    }
+
+    #series-detail-panel.has-content {
+        display: block;
     }
 
     StatusBar {
@@ -215,6 +236,7 @@ class MainScreen(Screen):
                     yield ChapterList()
                 with TabPane("Followed", id="followed-tab"):
                     yield ListView(id="followed-listview")
+                    yield Static("", id="series-detail-panel")
                 with TabPane("Ignored", id="ignored-tab"):
                     yield ListView(id="ignored-listview")
 
@@ -311,6 +333,13 @@ class MainScreen(Screen):
 
                 # Update the tab label with count
                 self._update_tab_label("followed-tab", f"Followed ({len(followed)})")
+
+                # Select first item if list has items and no restore index
+                if followed and restore_index is None:
+                    followed_list.index = 0
+
+                # Defer detail panel update to allow ListView to settle
+                self.call_later(self._update_series_detail_panel)
             except Exception:
                 pass
 
@@ -408,13 +437,42 @@ class MainScreen(Screen):
             pass
         return None
 
+    def _update_series_detail_panel(self) -> None:
+        """Update the series detail panel with the currently selected followed series."""
+        try:
+            panel = self.query_one("#series-detail-panel", Static)
+
+            # Get currently highlighted series (without focus check)
+            followed_list = self.query_one("#followed-listview", ListView)
+            series = None
+            if followed_list.index is not None:
+                item = followed_list.highlighted_child
+                if isinstance(item, SeriesListItem):
+                    series = item.series
+
+            if series and series.description:
+                panel.update(series.description)
+                panel.add_class("has-content")
+            else:
+                panel.update("")
+                panel.remove_class("has-content")
+        except Exception:
+            pass
+
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        """Handle list view highlight changes."""
+        if event.list_view.id == "followed-listview":
+            self._update_series_detail_panel()
+        self.refresh_bindings()
+
+    def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
+        """Handle tab changes."""
+        if event.pane.id == "followed-tab":
+            self._update_series_detail_panel()
+
     def on_chapter_list_chapter_highlighted(self, event: ChapterList.ChapterHighlighted) -> None:
         """Handle chapter highlight."""
         self._selected_chapter = event.chapter
-
-    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
-        """Handle list view highlight changes to refresh conditional bindings."""
-        self.refresh_bindings()
 
     def on_descendant_focus(self, event) -> None:
         """Handle focus changes to refresh conditional bindings."""
@@ -585,25 +643,42 @@ class MainScreen(Screen):
 
             series_name = chapter.series.name
             series_id = chapter.series_id
+            series_url = chapter.series.url
 
-            def handle_follow_result(result: FollowDialogResult | None) -> None:
-                """Handle the result from the follow dialog."""
+            async def do_follow(result: FollowDialogResult) -> None:
+                """Perform the follow operation with metadata fetch."""
                 try:
-                    if result is None:
-                        self._set_status("Follow cancelled")
-                        return
-
-                    # Re-fetch the series from the database to ensure it's attached to the session
+                    # Re-fetch the series from the database
                     series = self._series_service.get_series_by_id(series_id)
                     if not series:
                         self._set_status("Series not found")
                         return
 
-                    # Follow the series
+                    # Fetch series page for metadata
+                    description = None
+                    cover_image = None
+                    try:
+                        self._set_status(f"Fetching metadata for {series_name}...")
+                        html = await fetch_series_page(series_url)
+                        parser = SeriesPageParser(html)
+                        description = parser.get_description()
+                        cover_image_url = parser.get_cover_image_url()
+                        # Download the cover image if available
+                        if cover_image_url:
+                            try:
+                                cover_image = await download_image(cover_image_url)
+                            except Exception:
+                                pass  # Continue without cover if download fails
+                    except Exception:
+                        pass  # Continue without metadata if fetch fails
+
+                    # Follow the series with metadata
                     self._series_service.follow_series(
                         series,
                         result.path,
                         result.include_series_in_filename,
+                        description,
+                        cover_image,
                     )
 
                     # Queue all unprocessed chapters of this series
@@ -620,6 +695,14 @@ class MainScreen(Screen):
                     self._refresh_series()
                 except Exception as e:
                     self._set_status(f"Error: {e}")
+
+            def handle_follow_result(result: FollowDialogResult | None) -> None:
+                """Handle the result from the follow dialog."""
+                if result is None:
+                    self._set_status("Follow cancelled")
+                    return
+                # Run the async follow operation
+                self.app.call_later(lambda: self.run_worker(do_follow(result)))
 
             # Show dialog with callback
             self.app.push_screen(FollowDialog(series_name), handle_follow_result)
@@ -654,6 +737,51 @@ class MainScreen(Screen):
                 ConfirmDialog("Unfollow Series", f"Stop following '{series_name}'?"),
                 handle_unfollow_confirm,
             )
+        except Exception as e:
+            self._set_status(f"Error: {e}")
+
+    async def action_refresh_metadata(self) -> None:
+        """Refresh metadata for the selected followed series."""
+        try:
+            series = self._get_highlighted_followed_series()
+            if not series:
+                self._set_status("No followed series selected")
+                return
+
+            series_id = series.id
+            series_name = series.name
+            series_url = series.url
+
+            self._set_status(f"Fetching metadata for {series_name}...")
+
+            try:
+                html = await fetch_series_page(series_url)
+                parser = SeriesPageParser(html)
+                description = parser.get_description()
+                cover_image_url = parser.get_cover_image_url()
+
+                # Download the cover image if available
+                cover_image = None
+                if cover_image_url:
+                    try:
+                        cover_image = await download_image(cover_image_url)
+                    except Exception:
+                        pass  # Continue without cover if download fails
+
+                # Re-fetch series to ensure it's attached to the session
+                fresh_series = self._series_service.get_series_by_id(series_id)
+                if not fresh_series:
+                    self._set_status("Series not found")
+                    return
+
+                # Update metadata
+                self._series_service.update_series_metadata(
+                    fresh_series, description, cover_image
+                )
+
+                self._set_status(f"Updated metadata for: {series_name}")
+            except Exception as e:
+                self._set_status(f"Error fetching metadata: {e}")
         except Exception as e:
             self._set_status(f"Error: {e}")
 
@@ -754,7 +882,7 @@ class MainScreen(Screen):
     def action_help(self) -> None:
         """Show help information."""
         self._set_status(
-            "F=Fetch I=Ignore W=Follow O=Open P=Process Q=Queue S=Start U=Unfollow(followed)"
+            "F=Fetch I=Ignore W=Follow R=Refresh O=Open P=Process Q=Queue S=Start U=Unfollow"
         )
 
     def action_quit(self) -> None:

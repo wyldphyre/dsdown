@@ -73,3 +73,14 @@ def _run_migrations(engine: Engine) -> None:
             with engine.connect() as conn:
                 conn.execute(text("ALTER TABLE chapters ADD COLUMN volume INTEGER"))
                 conn.commit()
+
+    # Migration: Add description and cover_image columns to series table
+    if "series" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("series")]
+        with engine.connect() as conn:
+            if "description" not in columns:
+                conn.execute(text("ALTER TABLE series ADD COLUMN description TEXT"))
+                conn.commit()
+            if "cover_image" not in columns:
+                conn.execute(text("ALTER TABLE series ADD COLUMN cover_image BLOB"))
+                conn.commit()

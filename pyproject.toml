@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dsdown"
-version = "1.0.0"
+version = "1.0.1"
 description = "A TUI for managing and downloading files from dynasty-scans.com"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -15,6 +15,8 @@ dependencies = [
     "beautifulsoup4>=4.12.0",
     "sqlalchemy>=2.0.0",
     "lxml>=5.0.0",
+    "pillow>=10.0.0",
+    "rich-pixels>=3.0.0",
 ]
 
 [project.optional-dependencies]

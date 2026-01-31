@@ -102,6 +102,24 @@ class DynastyClient:
         response.raise_for_status()
         return response.text
 
+    async def download_image(self, image_url: str) -> bytes:
+        """Download an image and return its bytes.
+
+        Args:
+            image_url: The image URL (absolute or relative to dynasty-scans.com).
+
+        Returns:
+            The image data as bytes.
+        """
+        if image_url.startswith("/"):
+            url = f"{DYNASTY_BASE_URL}{image_url}"
+        else:
+            url = image_url
+
+        response = await self.client.get(url)
+        response.raise_for_status()
+        return response.content
+
     def _ensure_zip_archive(self, file_path: Path) -> Path:
         """Ensure the file is a valid zip archive, converting if necessary.
 
@@ -286,3 +304,9 @@ async def fetch_series_page(series_url: str) -> str:
     """Convenience function to fetch a series page."""
     async with DynastyClient() as client:
         return await client.get_series_page(series_url)
+
+
+async def download_image(image_url: str) -> bytes:
+    """Convenience function to download an image."""
+    async with DynastyClient() as client:
+        return await client.download_image(image_url)

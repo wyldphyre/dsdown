@@ -35,7 +35,7 @@ src/dsdown/
 ## Key Concepts
 
 - **Chapters**: Individual releases from dynasty-scans.com with title, URL, tags, authors, volume, and release date
-- **Series**: A collection of chapters that can be followed (auto-download) or ignored (auto-skip)
+- **Series**: A collection of chapters that can be followed (auto-download) or ignored (auto-skip), with optional description and cover image
 - **Download Queue**: Rate-limited queue (8 downloads per 24 hours)
 - **ComicInfo.xml**: CBZ metadata following the v2.1 spec
 - **Tabbed UI**: Main screen uses TabbedContent with Unprocessed/Followed/Ignored tabs
@@ -46,6 +46,7 @@ src/dsdown/
 - `w` - Follow series of selected chapter (auto-queue future chapters)
 - `i` - Ignore series of selected chapter (auto-skip future chapters)
 - `u` - Unfollow a followed series (when focused on followed list)
+- `r` - Refresh metadata (description/cover) for selected followed series
 - `p` - Mark chapter as processed (skip without downloading)
 - `q` - Queue chapter for download
 - `s` - Start processing download queue
