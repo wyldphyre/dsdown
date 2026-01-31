@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, List, Optional
@@ -37,6 +38,7 @@ class Series(Base):
     )
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cover_image: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
+    tags_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False
     )
@@ -55,6 +57,18 @@ class Series(Base):
     def is_ignored(self) -> bool:
         """Check if this series is ignored."""
         return self.status == SeriesStatus.IGNORED.value
+
+    @property
+    def tags(self) -> list[str]:
+        """Get the list of tags."""
+        if self.tags_json:
+            return json.loads(self.tags_json)
+        return []
+
+    @tags.setter
+    def tags(self, value: list[str]) -> None:
+        """Set the list of tags."""
+        self.tags_json = json.dumps(value)
 
     def __repr__(self) -> str:
         return f"<Series(name={self.name!r}, status={self.status!r})>"

@@ -15,6 +15,7 @@ class SeriesPageParser:
     - Series name
     - Description/summary
     - Cover image URL
+    - Tags
     """
 
     def __init__(self, html: str) -> None:
@@ -152,6 +153,42 @@ class SeriesPageParser:
                     return f"https://dynasty-scans.com{src}"
                 return src
         return None
+
+    def get_tags(self) -> list[str]:
+        """Get the tags associated with this series.
+
+        Returns:
+            List of tag names.
+        """
+        tags: list[str] = []
+
+        # Tags are typically in a section with links to /tags/
+        # Look for the tags container (usually has class "tags" or similar)
+        tags_container = self.soup.select_one(".tag-tags, .tags")
+        if tags_container:
+            for tag_link in tags_container.select('a[href*="/tags/"]'):
+                tag_text = tag_link.get_text(strip=True)
+                if tag_text:
+                    tags.append(tag_text)
+            if tags:
+                return tags
+
+        # Fallback: find all tag links on the page
+        for tag_link in self.soup.select('a[href*="/tags/"]'):
+            tag_text = tag_link.get_text(strip=True)
+            # Skip if it looks like the series name or navigation
+            if tag_text and len(tag_text) < 50:
+                tags.append(tag_text)
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_tags = []
+        for tag in tags:
+            if tag not in seen:
+                seen.add(tag)
+                unique_tags.append(tag)
+
+        return unique_tags
 
 
 def get_chapter_volumes(html: str) -> dict[str, int]:

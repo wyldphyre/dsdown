@@ -334,8 +334,10 @@ class MainScreen(Screen):
                 # Update the tab label with count
                 self._update_tab_label("followed-tab", f"Followed ({len(followed)})")
 
-                # Select first item if list has items and no restore index
-                if followed and restore_index is None:
+                # Restore selection or select first item
+                if restore_index is not None:
+                    followed_list.index = restore_index
+                elif followed:
                     followed_list.index = 0
 
                 # Defer detail panel update to allow ListView to settle
@@ -450,8 +452,15 @@ class MainScreen(Screen):
                 if isinstance(item, SeriesListItem):
                     series = item.series
 
-            if series and series.description:
-                panel.update(series.description)
+            if series and (series.description or series.tags):
+                # Build content with description first, then tags in a different color
+                parts = []
+                if series.description:
+                    parts.append(series.description)
+                if series.tags:
+                    tags_str = ", ".join(series.tags)
+                    parts.append(f"[bold cyan]Tags:[/bold cyan] [cyan]{tags_str}[/cyan]")
+                panel.update("\n".join(parts))
                 panel.add_class("has-content")
             else:
                 panel.update("")
@@ -657,11 +666,13 @@ class MainScreen(Screen):
                     # Fetch series page for metadata
                     description = None
                     cover_image = None
+                    tags = None
                     try:
                         self._set_status(f"Fetching metadata for {series_name}...")
                         html = await fetch_series_page(series_url)
                         parser = SeriesPageParser(html)
                         description = parser.get_description()
+                        tags = parser.get_tags()
                         cover_image_url = parser.get_cover_image_url()
                         # Download the cover image if available
                         if cover_image_url:
@@ -679,6 +690,7 @@ class MainScreen(Screen):
                         result.include_series_in_filename,
                         description,
                         cover_image,
+                        tags,
                     )
 
                     # Queue all unprocessed chapters of this series
@@ -758,6 +770,7 @@ class MainScreen(Screen):
                 html = await fetch_series_page(series_url)
                 parser = SeriesPageParser(html)
                 description = parser.get_description()
+                tags = parser.get_tags()
                 cover_image_url = parser.get_cover_image_url()
 
                 # Download the cover image if available
@@ -776,8 +789,18 @@ class MainScreen(Screen):
 
                 # Update metadata
                 self._series_service.update_series_metadata(
-                    fresh_series, description, cover_image
+                    fresh_series, description, cover_image, tags
                 )
+
+                # Update the series object in the current list item so panel shows new data
+                followed_list = self.query_one("#followed-listview", ListView)
+                if followed_list.highlighted_child:
+                    item = followed_list.highlighted_child
+                    if isinstance(item, SeriesListItem):
+                        item.series = fresh_series
+
+                # Refresh the detail panel with updated data
+                self._update_series_detail_panel()
 
                 self._set_status(f"Updated metadata for: {series_name}")
             except Exception as e:
