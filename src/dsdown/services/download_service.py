@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import platform
+import subprocess
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -16,6 +18,24 @@ from dsdown.models.download import DownloadHistory, DownloadQueue, DownloadStatu
 from dsdown.scraper.client import DynastyClient
 from dsdown.scraper.series_parser import get_chapter_volumes
 from dsdown.services.comicinfo import add_comicinfo_to_cbz, extract_title_without_chapter
+
+
+def _open_folder_in_file_manager(folder: Path) -> None:
+    """Open a folder in the system's default file manager.
+
+    Args:
+        folder: The folder path to open.
+    """
+    system = platform.system()
+    try:
+        if system == "Darwin":  # macOS
+            subprocess.run(["open", str(folder)], check=False)
+        elif system == "Windows":
+            subprocess.run(["explorer", str(folder)], check=False)
+        else:  # Linux and others
+            subprocess.run(["xdg-open", str(folder)], check=False)
+    except Exception:
+        pass  # Silently ignore errors opening folder
 
 
 class DownloadService:
@@ -39,6 +59,7 @@ class DownloadService:
             .where(DownloadQueue.status.in_([
                 DownloadStatus.PENDING.value,
                 DownloadStatus.DOWNLOADING.value,
+                DownloadStatus.FAILED.value,
             ]))
             .order_by(DownloadQueue.priority.desc(), DownloadQueue.added_at)
         )
@@ -281,6 +302,9 @@ class DownloadService:
                     chapter_service.mark_downloaded(chapter)
                     downloaded.append(chapter)
 
+                    # Open the folder in file manager
+                    _open_folder_in_file_manager(destination)
+
                 except Exception as e:
                     # Mark as failed
                     entry.status = DownloadStatus.FAILED.value
@@ -297,89 +321,3 @@ class DownloadService:
             )
 
         return downloaded
-
-    async def download_single(
-        self,
-        chapter: Chapter,
-        destination: Path | None = None,
-        progress_callback: callable | None = None,
-    ) -> bool:
-        """Download a single chapter immediately.
-
-        This respects rate limiting but doesn't use the queue.
-
-        Args:
-            chapter: The chapter to download.
-            destination: Optional destination path.
-            progress_callback: Optional progress callback.
-
-        Returns:
-            True if download succeeded, False otherwise.
-        """
-        from dsdown.services.chapter_service import ChapterService
-
-        if self.get_available_slots() == 0:
-            if progress_callback:
-                next_time = self.get_next_slot_time()
-                if next_time:
-                    progress_callback(
-                        f"No download slots. Next at {next_time.strftime('%H:%M')}.",
-                        0,
-                        1,
-                    )
-            return False
-
-        chapter_service = ChapterService(self.session)
-
-        # Determine destination
-        if destination is None:
-            if chapter.series and chapter.series.download_path:
-                destination = Path(chapter.series.download_path)
-            else:
-                destination = Path.home() / "Downloads" / "dsdown"
-
-        try:
-            if progress_callback:
-                progress_callback(f"Downloading: {chapter.title}", 0, 1)
-
-            # Record download start
-            self.record_download_start(chapter)
-
-            # Download with series name and title for filename
-            # Only include series name if the setting is enabled
-            include_series = (
-                chapter.series.include_series_in_filename
-                if chapter.series else True
-            )
-            series_name = chapter.series.name if chapter.series and include_series else None
-            async with DynastyClient() as client:
-                # Fetch volume info from series page if not already set
-                await self._fetch_volume_info(chapter, client)
-
-                # Get subtitle for filename
-                subtitle = extract_title_without_chapter(chapter.title, series_name)
-
-                cbz_path = await client.download_chapter(
-                    chapter.url,
-                    destination,
-                    series_name=series_name,
-                    chapter_title=chapter.title,
-                    volume=chapter.volume,
-                    subtitle=subtitle,
-                )
-
-            # Add ComicInfo.xml metadata
-            add_comicinfo_to_cbz(cbz_path, chapter)
-
-            # Mark as downloaded
-            chapter_service.mark_downloaded(chapter)
-
-            if progress_callback:
-                progress_callback(f"Downloaded: {chapter.title}", 1, 1)
-
-            return True
-
-        except Exception as e:
-            if progress_callback:
-                progress_callback(f"Failed: {e}", 0, 1)
-            return False

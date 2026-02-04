@@ -24,19 +24,25 @@ class QueueItem(ListItem):
         chapter = self.entry.chapter
         status = self.entry.status
 
-        # Status indicator
+        # Status indicator and formatting
         if status == DownloadStatus.DOWNLOADING.value:
             indicator = "▶"
+            status_label = f"[{status}]"
+            text = f"{indicator} {chapter.title} {status_label}"
         elif status == DownloadStatus.PENDING.value:
             indicator = "○"
+            text = f"{indicator} {chapter.title}"
         elif status == DownloadStatus.COMPLETED.value:
             indicator = "✓"
-        else:
+            text = f"{indicator} {chapter.title} [{status}]"
+        elif status == DownloadStatus.FAILED.value:
             indicator = "✗"
+            text = f"[bold red]{indicator} {chapter.title} [FAILED][/bold red]"
+        else:
+            indicator = "?"
+            text = f"{indicator} {chapter.title} [{status}]"
 
-        status_label = f"[{status}]" if status != DownloadStatus.PENDING.value else ""
-
-        yield Label(f"{indicator} {chapter.title} {status_label}", classes="queue-item-title")
+        yield Label(text, classes="queue-item-title")
 
 
 class DownloadQueueWidget(Vertical):
