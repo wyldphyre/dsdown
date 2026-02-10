@@ -61,6 +61,15 @@ class ChapterService:
             grouped[chapter.release_date].append(chapter)
         return grouped
 
+    def get_all_chapters(self) -> Sequence[Chapter]:
+        """Get all chapters, ordered by release date descending."""
+        stmt = (
+            select(Chapter)
+            .options(joinedload(Chapter.series))
+            .order_by(Chapter.release_date.desc(), Chapter.id.desc())
+        )
+        return self.session.execute(stmt).scalars().unique().all()
+
     def get_chapter_by_url(self, url: str) -> Chapter | None:
         """Get a chapter by its URL."""
         stmt = (

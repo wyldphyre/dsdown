@@ -66,6 +66,25 @@ class SeriesListItem(ListItem):
         yield Label(f"• {self.series.name}", classes="series-name")
 
 
+class HistoryListItem(ListItem):
+    """A chapter item for the history list."""
+
+    def __init__(self, chapter: Chapter) -> None:
+        super().__init__()
+        self.chapter = chapter
+
+    def compose(self) -> ComposeResult:
+        if self.chapter.downloaded:
+            indicator = "[bold #00ff00]✓[/bold #00ff00]"
+        elif self.chapter.processed:
+            indicator = "[dim]—[/dim]"
+        else:
+            indicator = "○"
+
+        series_name = f" [dim]({self.chapter.series.name})[/dim]" if self.chapter.series else ""
+        yield Label(f"{indicator} {self.chapter.title}{series_name}", classes="history-item-title")
+
+
 class MainScreen(Screen):
     """Main application screen."""
 
@@ -216,6 +235,19 @@ class MainScreen(Screen):
         min-height: 3;
     }
 
+    #history-listview {
+        height: 1fr;
+        min-height: 3;
+    }
+
+    HistoryListItem {
+        height: auto;
+    }
+
+    .history-item-title {
+        width: 100%;
+    }
+
     .series-name {
         padding-left: 1;
     }
@@ -276,6 +308,8 @@ class MainScreen(Screen):
                     yield Static("", id="series-detail-panel")
                 with TabPane("Ignored", id="ignored-tab"):
                     yield ListView(id="ignored-listview")
+                with TabPane("History", id="history-tab"):
+                    yield ListView(id="history-listview")
 
         with Vertical(id="right-panel"):
             yield DownloadQueueWidget()
@@ -310,6 +344,7 @@ class MainScreen(Screen):
                 self._refresh_chapters()
                 self._refresh_queue()
                 self._refresh_series()
+                self._refresh_history()
             # Force tab bar to refresh after batch_update completes
             self._refresh_tab_labels()
         except Exception as e:
@@ -406,6 +441,20 @@ class MainScreen(Screen):
                 self.set_timer(0.1, do_restore)
         except Exception:
             pass  # Silently ignore refresh errors
+
+    def _refresh_history(self) -> None:
+        """Refresh the history list with all chapters."""
+        try:
+            all_chapters = self._chapter_service.get_all_chapters()
+
+            history_list = self.query_one("#history-listview", ListView)
+            history_list.clear()
+            for chapter in all_chapters:
+                history_list.append(HistoryListItem(chapter))
+
+            self._update_tab_label("history-tab", f"History ({len(all_chapters)})")
+        except Exception:
+            pass
 
     def _set_status(self, message: str) -> None:
         """Set the status bar message."""
