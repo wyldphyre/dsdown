@@ -14,7 +14,8 @@ from dsdown.config import DYNASTY_BASE_URL
 from dsdown.models.chapter import Chapter
 from dsdown.models.database import get_session, init_db
 from dsdown.models.series import Series
-from dsdown.scraper.client import download_image, fetch_series_page
+from dsdown.scraper.chapter_parser import ChapterPageParser
+from dsdown.scraper.client import DynastyClient, download_image, fetch_series_page
 from dsdown.scraper.series_parser import SeriesPageParser
 from dsdown.screens.confirm_dialog import ConfirmDialog
 from dsdown.screens.follow_dialog import FollowDialog, FollowDialogResult
@@ -93,6 +94,7 @@ class MainScreen(Screen):
         ("i", "ignore", "Ignore"),
         ("w", "follow", "Follow"),
         ("u", "unfollow", "Unfollow"),
+        ("b", "queue_backlog", "Queue Backlog"),
         ("r", "refresh_metadata", "Refresh"),
         ("o", "open", "Open"),
         ("p", "process", "Process"),
@@ -290,8 +292,8 @@ class MainScreen(Screen):
 
     def check_action(self, action: str, parameters: tuple) -> bool | None:
         """Check if an action should be shown/enabled."""
-        if action == "unfollow":
-            # Only show unfollow when followed series list has focus
+        if action in ("unfollow", "queue_backlog"):
+            # Only show when followed series list has focus
             return self._get_highlighted_followed_series() is not None
         return True
 
@@ -903,6 +905,97 @@ class MainScreen(Screen):
         except Exception as e:
             self._set_status(f"Error: {e}")
 
+    def action_queue_backlog(self) -> None:
+        """Fetch series page and queue chapters not yet downloaded."""
+        try:
+            series = self._get_highlighted_followed_series()
+            if not series:
+                self._set_status("No followed series selected")
+                return
+
+            series_id = series.id
+            series_name = series.name
+            series_url = series.url
+
+            self._set_status(f"Fetching chapter list for {series_name}...")
+
+            async def do_queue_backlog() -> None:
+                try:
+                    async with DynastyClient() as client:
+                        # Fetch and parse the series page
+                        html = await client.get_series_page(series_url)
+                        parser = SeriesPageParser(html)
+                        page_chapters = parser.get_chapters()
+                        chapter_volumes = parser.get_chapter_volumes()
+
+                        if not page_chapters:
+                            self._set_status(f"No chapters found on series page: {series_name}")
+                            return
+
+                        queued = 0
+                        created = 0
+                        total = len(page_chapters)
+
+                        for i, (ch_url, ch_title) in enumerate(page_chapters):
+                            self._set_status(
+                                f"Processing {i + 1}/{total} for {series_name}..."
+                            )
+
+                            existing = self._chapter_service.get_chapter_by_url(ch_url)
+
+                            if existing:
+                                # Already in DB - queue if not downloaded
+                                if not existing.downloaded:
+                                    self._download_service.add_to_queue(existing)
+                                    if not existing.processed:
+                                        self._chapter_service.mark_processed(existing)
+                                    queued += 1
+                            else:
+                                # Not in DB - fetch chapter page for metadata, create, and queue
+                                try:
+                                    ch_html = await client.get_chapter_page(ch_url)
+                                    ch_parser = ChapterPageParser(ch_html)
+                                    authors = ch_parser.get_authors() or []
+                                    tags = ch_parser.get_tags() or []
+                                except Exception:
+                                    authors = []
+                                    tags = []
+
+                                chapter = self._chapter_service.create_chapter(
+                                    url=ch_url,
+                                    title=ch_title,
+                                    authors=authors,
+                                    tags=tags,
+                                    series_id=series_id,
+                                )
+
+                                # Set volume if available
+                                if ch_url in chapter_volumes:
+                                    chapter.volume = chapter_volumes[ch_url]
+                                    self._chapter_service.session.commit()
+
+                                self._download_service.add_to_queue(chapter)
+                                self._chapter_service.mark_processed(chapter)
+                                created += 1
+                                queued += 1
+
+                        parts = []
+                        if created:
+                            parts.append(f"{created} new")
+                        parts.append(f"{queued} queued")
+                        self._set_status(f"{series_name}: {', '.join(parts)}")
+
+                        self._refresh_chapters()
+                        self._refresh_queue()
+                        self._refresh_history()
+
+                except Exception as e:
+                    self._set_status(f"Error fetching backlog: {e}")
+
+            self.run_worker(do_queue_backlog())
+        except Exception as e:
+            self._set_status(f"Error: {e}")
+
     def _open_chapter(self, chapter: Chapter) -> None:
         """Open a chapter in the browser."""
         url = f"{DYNASTY_BASE_URL}{chapter.url}"
@@ -966,36 +1059,39 @@ class MainScreen(Screen):
         except Exception as e:
             self._set_status(f"Error: {e}")
 
-    async def action_start_queue(self) -> None:
+    def action_start_queue(self) -> None:
         """Start processing the download queue."""
         self._set_status("Starting download queue...")
 
-        def progress(msg: str, current: int, total: int) -> None:
-            self._set_status(f"[{current}/{total}] {msg}")
-            self._refresh_queue()
+        async def do_start_queue() -> None:
+            def progress(msg: str, current: int, total: int) -> None:
+                self._set_status(f"[{current}/{total}] {msg}")
+                self._refresh_queue()
 
-        def download_progress(title: str, downloaded: int, total: int) -> None:
-            try:
-                queue_widget = self.query_one(DownloadQueueWidget)
-                queue_widget.set_download_progress(title, downloaded, total)
-                self.refresh()
-            except Exception:
-                pass
+            def download_progress(title: str, downloaded: int, total: int) -> None:
+                try:
+                    queue_widget = self.query_one(DownloadQueueWidget)
+                    queue_widget.set_download_progress(title, downloaded, total)
+                    self.refresh()
+                except Exception:
+                    pass
 
-        try:
-            downloaded = await self._download_service.process_queue(
-                progress, download_progress
-            )
-            # Clear progress display
             try:
-                queue_widget = self.query_one(DownloadQueueWidget)
-                queue_widget.clear_download_progress()
-            except Exception:
-                pass
-            self._set_status(f"Downloaded {len(downloaded)} chapter(s)")
-            self._refresh_all()
-        except Exception as e:
-            self._set_status(f"Error processing queue: {e}")
+                downloaded = await self._download_service.process_queue(
+                    progress, download_progress
+                )
+                # Clear progress display
+                try:
+                    queue_widget = self.query_one(DownloadQueueWidget)
+                    queue_widget.clear_download_progress()
+                except Exception:
+                    pass
+                self._set_status(f"Downloaded {len(downloaded)} chapter(s)")
+                self._refresh_all()
+            except Exception as e:
+                self._set_status(f"Error processing queue: {e}")
+
+        self.run_worker(do_start_queue())
 
     def action_help(self) -> None:
         """Show help information."""

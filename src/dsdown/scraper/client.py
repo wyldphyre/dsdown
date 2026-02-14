@@ -230,12 +230,14 @@ class DynastyClient:
             response.raise_for_status()
 
             # Determine the filename
-            if series_name and chapter_title:
+            if chapter_title:
                 # Extract chapter number from title
                 chapter_num = extract_chapter_number(chapter_title)
                 if chapter_num:
-                    # Build filename: <SeriesName> v<Vol> ch<Num> - <Title>.cbz
-                    parts = [sanitize_filename(series_name)]
+                    # Build filename with available parts
+                    parts = []
+                    if series_name:
+                        parts.append(sanitize_filename(series_name))
                     if volume is not None:
                         parts.append(f"v{volume}")
                     parts.append(f"ch{chapter_num}")
@@ -243,10 +245,13 @@ class DynastyClient:
                     if subtitle:
                         filename += f" - {sanitize_filename(subtitle)}"
                     filename += ".cbz"
-                else:
+                elif series_name:
                     # No chapter number found, use slug from URL
                     slug = chapter_url.rstrip("/").split("/")[-1]
                     filename = f"{sanitize_filename(series_name)} - {slug}.cbz"
+                else:
+                    # No series name or chapter number, use sanitized title
+                    filename = f"{sanitize_filename(chapter_title)}.cbz"
             else:
                 # Fallback: try Content-Disposition header
                 content_disposition = response.headers.get("content-disposition", "")

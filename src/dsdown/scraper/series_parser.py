@@ -31,16 +31,7 @@ class SeriesPageParser:
         chapter_volumes: dict[str, int] = {}
         current_volume: int | None = None
 
-        # Find the chapters list container
-        # Dynasty-scans uses a dl (definition list) structure for chapters
-        chapters_list = self.soup.select_one(".chapter-list, #chapters, dl.chapter-list")
-        if not chapters_list:
-            # Try to find any dl element that contains chapter links
-            for dl in self.soup.find_all("dl"):
-                if dl.select_one('a[href*="/chapters/"]'):
-                    chapters_list = dl
-                    break
-
+        chapters_list = self._find_chapters_container()
         if not chapters_list:
             # Fallback: scan the whole document
             chapters_list = self.soup.body
@@ -153,6 +144,57 @@ class SeriesPageParser:
                     return f"https://dynasty-scans.com{src}"
                 return src
         return None
+
+    def _find_chapters_container(self) -> Tag | None:
+        """Find the chapters list container on the page.
+
+        Returns:
+            The container element, or None if not found.
+        """
+        # Dynasty-scans uses a dl (definition list) structure for chapters
+        container = self.soup.select_one(".chapter-list, #chapters, dl.chapter-list")
+        if not container:
+            # Try to find any dl element that contains chapter links
+            for dl in self.soup.find_all("dl"):
+                if dl.select_one('a[href*="/chapters/"]'):
+                    container = dl
+                    break
+        return container
+
+    def get_chapters(self) -> list[tuple[str, str]]:
+        """Get all chapter URLs and titles from the series page.
+
+        Only searches within the chapters list container to avoid
+        picking up links from other sections (e.g. Recently Added sidebar).
+
+        Returns:
+            List of (url_path, title) tuples for each chapter.
+        """
+        container = self._find_chapters_container()
+        if not container:
+            return []
+
+        chapters: list[tuple[str, str]] = []
+        seen_urls: set[str] = set()
+
+        for link in container.select('a[href*="/chapters/"]'):
+            href = link.get("href", "")
+            if not href or "/chapters/" not in href:
+                continue
+
+            # Normalize URL path
+            if not href.startswith("/"):
+                href = "/chapters/" + href.split("/chapters/", 1)[1]
+
+            if href in seen_urls:
+                continue
+            seen_urls.add(href)
+
+            title = link.get_text(strip=True)
+            if title:
+                chapters.append((href, title))
+
+        return chapters
 
     def get_tags(self) -> list[str]:
         """Get the tags associated with this series.
