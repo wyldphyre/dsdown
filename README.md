@@ -70,6 +70,22 @@ pip install -e ".[dev]"
 ruff check src/
 ```
 
+### Running Tests
+
+```bash
+# Run all offline tests
+pytest
+
+# Run with verbose output
+pytest -v
+
+# Run a specific test file
+pytest tests/test_releases_parser.py
+
+# Run live smoke tests against the real website (to check if scraping is broken)
+pytest -m live
+```
+
 ## License
 
 MIT

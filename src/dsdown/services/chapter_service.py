@@ -26,6 +26,7 @@ class FetchResult:
     queued: int
     ignored: int
     new: int  # Unprocessed (not followed or ignored)
+    warning: str | None = None
 
 
 class ChapterService:
@@ -140,6 +141,7 @@ class ChapterService:
         first_chapter_url: str | None = None
         page = 1
         found_last = False
+        structure_warnings: list[str] = []
 
         async with DynastyClient() as client:
             while not found_last:
@@ -148,6 +150,11 @@ class ChapterService:
 
                 html = await client.get_releases_page(page)
                 parser = ReleasesParser(html)
+
+                # Validate page structure on first page
+                if page == 1:
+                    structure_warnings = parser.validate_structure()
+
                 parsed_chapters = parser.parse()
 
                 if not parsed_chapters:
@@ -189,11 +196,19 @@ class ChapterService:
         # Process chapters based on series status and get counts
         queued, ignored = await self._process_chapters_by_series(new_chapters)
 
+        # Build warning if scraping looks broken
+        warning = None
+        if structure_warnings:
+            warning = "Page structure changed: " + "; ".join(structure_warnings)
+        elif page == 1 and not new_chapters and not found_last:
+            warning = "No chapters found on releases page. Site structure may have changed."
+
         return FetchResult(
             total=len(new_chapters),
             queued=queued,
             ignored=ignored,
             new=len(new_chapters) - queued - ignored,
+            warning=warning,
         )
 
     async def _create_chapter_from_parsed(

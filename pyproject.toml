@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dsdown"
-version = "1.0.5"
+version = "1.0.6"
 description = "A TUI for managing and downloading files from dynasty-scans.com"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -31,6 +31,11 @@ dsdown = "dsdown.__main__:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dsdown"]
+
+[tool.pytest.ini_options]
+markers = ["live: tests that require network access (deselect with '-m not live')"]
+addopts = "-m 'not live'"
+asyncio_mode = "auto"
 
 [tool.ruff]
 line-length = 100

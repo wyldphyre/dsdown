@@ -26,6 +26,21 @@ class ReleasesParser:
     def __init__(self, html: str) -> None:
         self.soup = BeautifulSoup(html, "lxml")
 
+    def validate_structure(self) -> list[str]:
+        """Check that expected page landmarks exist.
+
+        Returns:
+            List of warning messages for missing elements.
+        """
+        warnings = []
+        if not self.soup.select_one("#main, .chapters, main"):
+            warnings.append("Missing main content container (#main)")
+        if not self.soup.find("dt"):
+            warnings.append("No <dt> date headers found on releases page")
+        if not self.soup.find("dd"):
+            warnings.append("No <dd> chapter entries found on releases page")
+        return warnings
+
     def parse(self) -> list[ParsedChapter]:
         """Parse all chapters from the releases page.
 
@@ -142,7 +157,7 @@ class ReleasesParser:
     def get_next_page_url(self) -> str | None:
         """Get the URL for the next page of releases, if any."""
         # Look for pagination links
-        next_link = self.soup.select_one('a[rel="next"], a.next_page, a:contains("Next")')
+        next_link = self.soup.select_one('a[rel="next"], a.next_page, a:-soup-contains("Next")')
         if next_link:
             return next_link.get("href")
 

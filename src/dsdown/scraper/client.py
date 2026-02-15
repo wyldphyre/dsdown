@@ -49,6 +49,22 @@ class DynastyClient:
             raise RuntimeError("Client not initialized. Use 'async with' context manager.")
         return self._client
 
+    @staticmethod
+    def _validate_html_response(response: httpx.Response) -> None:
+        """Validate that an HTTP response looks like an HTML page.
+
+        Raises:
+            ValueError: If the response doesn't look like valid HTML.
+        """
+        content_type = response.headers.get("content-type", "")
+        if "text/html" not in content_type:
+            raise ValueError(f"Unexpected content type: {content_type}")
+        if len(response.text) < 500:
+            raise ValueError(
+                f"Response suspiciously short ({len(response.text)} bytes) - "
+                "may be an error page or CAPTCHA"
+            )
+
     async def get_releases_page(self, page: int = 1) -> str:
         """Fetch the chapter releases page.
 
@@ -64,6 +80,7 @@ class DynastyClient:
 
         response = await self.client.get(url)
         response.raise_for_status()
+        self._validate_html_response(response)
         return response.text
 
     async def get_chapter_page(self, chapter_url: str) -> str:
@@ -82,6 +99,7 @@ class DynastyClient:
 
         response = await self.client.get(url)
         response.raise_for_status()
+        self._validate_html_response(response)
         return response.text
 
     async def get_series_page(self, series_url: str) -> str:
@@ -100,6 +118,7 @@ class DynastyClient:
 
         response = await self.client.get(url)
         response.raise_for_status()
+        self._validate_html_response(response)
         return response.text
 
     async def download_image(self, image_url: str) -> bytes:

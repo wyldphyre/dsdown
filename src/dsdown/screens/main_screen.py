@@ -670,15 +670,20 @@ class MainScreen(Screen):
 
         try:
             result = await self._chapter_service.fetch_new_chapters(progress)
-            # Build summary message
-            parts = [f"Found {result.total}"]
-            if result.queued:
-                parts.append(f"queued {result.queued}")
-            if result.ignored:
-                parts.append(f"ignored {result.ignored}")
-            if result.new:
-                parts.append(f"new {result.new}")
-            self._set_status(", ".join(parts))
+
+            if result.warning:
+                self._set_status(f"[bold red]{result.warning}[/bold red]")
+            else:
+                # Build summary message
+                parts = [f"Found {result.total}"]
+                if result.queued:
+                    parts.append(f"queued {result.queued}")
+                if result.ignored:
+                    parts.append(f"ignored {result.ignored}")
+                if result.new:
+                    parts.append(f"new {result.new}")
+                self._set_status(", ".join(parts))
+
             self._refresh_all()
         except Exception as e:
             self._set_status(f"Error fetching chapters: {e}")

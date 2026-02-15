@@ -11,6 +11,17 @@ class ChapterPageParser:
     def __init__(self, html: str) -> None:
         self.soup = BeautifulSoup(html, "lxml")
 
+    def validate_structure(self) -> list[str]:
+        """Check that expected page landmarks exist.
+
+        Returns:
+            List of warning messages for missing elements.
+        """
+        warnings = []
+        if not self.soup.select_one("h2#chapter-title, h2.chapter-title, h2"):
+            warnings.append("No chapter title element (h2) found")
+        return warnings
+
     def get_series_url(self) -> str | None:
         """Get the series URL for this chapter.
 
