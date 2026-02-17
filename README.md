@@ -17,11 +17,17 @@ A terminal user interface (TUI) for managing and downloading manga chapters from
 
 ## Installation
 
+From the project root directory, create a virtual environment and install:
+
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
 ```
 
 ## Usage
+
+With the virtual environment activated, run:
 
 ```bash
 dsdown
@@ -65,12 +71,21 @@ Configuration and data are stored in `~/.config/dsdown/`:
 
 ## Development
 
+Install with dev dependencies (includes pytest and ruff):
+
 ```bash
 pip install -e ".[dev]"
+```
+
+### Linting
+
+```bash
 ruff check src/
 ```
 
 ### Running Tests
+
+All commands below are run from the project root with the virtual environment activated.
 
 ```bash
 # Run all offline tests
