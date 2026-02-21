@@ -14,9 +14,8 @@ def sanitize_filename(name: str) -> str:
     Returns:
         A filename-safe string.
     """
-    invalid_chars = '<>:"/\\|?*'
-    result = name
-    for char in invalid_chars:
+    result = name.replace('"', "'")
+    for char in '<>:/\\|?*':
         result = result.replace(char, "_")
     return result.strip()
 
