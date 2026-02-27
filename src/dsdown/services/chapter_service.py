@@ -170,10 +170,12 @@ class ChapterService:
                         found_last = True
                         break
 
-                    # Skip if chapter already exists
-                    existing = self.get_chapter_by_url(parsed.url)
-                    if existing:
-                        continue
+                    # Stop if we've reached a chapter already in the database —
+                    # releases are ordered newest first, so anything below this
+                    # point has already been fetched.
+                    if self.get_chapter_by_url(parsed.url):
+                        found_last = True
+                        break
 
                     # Create the chapter
                     chapter = await self._create_chapter_from_parsed(client, parsed)
