@@ -3,16 +3,27 @@
 from __future__ import annotations
 
 import webbrowser
+from datetime import timezone
 from pathlib import Path
 
 from textual.app import ComposeResult
 from textual.containers import Container, Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, Header, Label, ListItem, ListView, Static, TabbedContent, TabPane
+from textual.widgets import (
+    Footer,
+    Header,
+    Label,
+    ListItem,
+    ListView,
+    Static,
+    TabbedContent,
+    TabPane,
+)
 
 from dsdown.config import DYNASTY_BASE_URL
 from dsdown.models.chapter import Chapter
 from dsdown.models.database import get_session, init_db
+from dsdown.models.download import DownloadStatus
 from dsdown.models.series import Series
 from dsdown.scraper.chapter_parser import ChapterPageParser
 from dsdown.scraper.client import DynastyClient, download_image, fetch_series_page
@@ -100,6 +111,7 @@ class MainScreen(Screen):
         ("p", "process", "Process"),
         ("q", "queue", "Queue"),
         ("s", "start_queue", "Start Queue"),
+        ("t", "retry", "Retry"),
         ("?", "help", "Help"),
         ("escape", "quit", "Quit"),
     ]
@@ -295,6 +307,8 @@ class MainScreen(Screen):
         if action in ("unfollow", "queue_backlog"):
             # Only show when followed series list has focus
             return self._get_highlighted_followed_series() is not None
+        if action == "retry":
+            return self._get_selected_failed_queue_item() is not None
         return True
 
     def compose(self) -> ComposeResult:
@@ -378,7 +392,12 @@ class MainScreen(Screen):
             queue = self._download_service.get_queue()
             available = self._download_service.get_available_slots()
             next_time = self._download_service.get_next_slot_time()
-            next_time_str = next_time.strftime("%H:%M") if next_time else None
+            if next_time:
+                # next_time is UTC; convert to local time for display
+                local_time = next_time.replace(tzinfo=timezone.utc).astimezone()
+                next_time_str = local_time.strftime("%I:%M %p").lstrip("0")
+            else:
+                next_time_str = None
 
             queue_widget = self.query_one(DownloadQueueWidget)
             queue_widget.update_queue(queue, available, next_time_str)
@@ -647,6 +666,17 @@ class MainScreen(Screen):
                 FollowDialog(series_name, existing_path, include_series),
                 handle_edit_result,
             )
+
+    def _get_selected_failed_queue_item(self):
+        """Get the currently selected queue item if it is in FAILED status."""
+        try:
+            listview = self.query_one("#queue-listview", ListView)
+            item = listview.highlighted_child
+            if isinstance(item, QueueItem) and item.entry.status == DownloadStatus.FAILED.value:
+                return item
+        except Exception:
+            pass
+        return None
 
     def _get_selected_chapter(self) -> Chapter | None:
         """Get the currently selected chapter, refreshed from the database."""
@@ -1097,6 +1127,19 @@ class MainScreen(Screen):
                 self._set_status(f"Error processing queue: {e}")
 
         self.run_worker(do_start_queue())
+
+    def action_retry(self) -> None:
+        """Reset a failed queue item back to pending."""
+        try:
+            item = self._get_selected_failed_queue_item()
+            if not item:
+                return
+            title = item.entry.chapter.title
+            self._download_service.retry_failed(item.entry)
+            self._set_status(f"Retrying: {title}")
+            self._refresh_queue()
+        except Exception as e:
+            self._set_status(f"Error: {e}")
 
     def action_help(self) -> None:
         """Show help information."""

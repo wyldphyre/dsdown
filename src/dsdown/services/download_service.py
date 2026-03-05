@@ -107,6 +107,11 @@ class DownloadService:
         self.session.delete(entry)
         self.session.commit()
 
+    def retry_failed(self, entry: DownloadQueue) -> None:
+        """Reset a failed queue entry back to pending so it will be retried."""
+        entry.status = DownloadStatus.PENDING.value
+        self.session.commit()
+
     def get_available_slots(self) -> int:
         """Get the number of available download slots.
 
@@ -115,7 +120,7 @@ class DownloadService:
         Returns:
             Number of available download slots.
         """
-        cutoff = datetime.now() - timedelta(hours=24)
+        cutoff = datetime.utcnow() - timedelta(hours=24)
         count = self.session.execute(
             select(func.count(DownloadHistory.id)).where(
                 DownloadHistory.started_at >= cutoff
@@ -125,7 +130,7 @@ class DownloadService:
 
     def get_downloads_in_last_24h(self) -> int:
         """Get the number of downloads started in the last 24 hours."""
-        cutoff = datetime.now() - timedelta(hours=24)
+        cutoff = datetime.utcnow() - timedelta(hours=24)
         return self.session.execute(
             select(func.count(DownloadHistory.id)).where(
                 DownloadHistory.started_at >= cutoff
@@ -142,7 +147,7 @@ class DownloadService:
             return None
 
         # Find the oldest download in the last 24 hours
-        cutoff = datetime.now() - timedelta(hours=24)
+        cutoff = datetime.utcnow() - timedelta(hours=24)
         oldest = self.session.execute(
             select(DownloadHistory)
             .where(DownloadHistory.started_at >= cutoff)
