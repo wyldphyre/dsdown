@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import webbrowser
-from datetime import timezone
+from datetime import date, timezone
 from pathlib import Path
 
 from textual.app import ComposeResult
@@ -228,7 +228,7 @@ class MainScreen(Screen):
     #queue-status {
         padding: 0 1;
         color: $text-muted;
-        height: 1;
+        height: auto;
     }
 
     QueueItem {
@@ -395,7 +395,11 @@ class MainScreen(Screen):
             if next_time:
                 # next_time is UTC; convert to local time for display
                 local_time = next_time.replace(tzinfo=timezone.utc).astimezone()
-                next_time_str = local_time.strftime("%I:%M %p").lstrip("0")
+                time_str = local_time.strftime("%I:%M %p").lstrip("0")
+                if local_time.date() > date.today():
+                    next_time_str = f"{time_str} tomorrow"
+                else:
+                    next_time_str = time_str
             else:
                 next_time_str = None
 
