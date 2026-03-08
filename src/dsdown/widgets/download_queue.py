@@ -65,6 +65,7 @@ class DownloadQueueWidget(Vertical):
         queue: Sequence[DownloadQueueModel],
         available_slots: int,
         next_slot_time: str | None = None,
+        restore_entry_id: int | None = None,
     ) -> None:
         """Update the displayed queue.
 
@@ -72,9 +73,11 @@ class DownloadQueueWidget(Vertical):
             queue: The download queue entries.
             available_slots: Number of available download slots.
             next_slot_time: When the next slot becomes available (formatted string).
+            restore_entry_id: ID of the queue entry to keep selected after refresh.
         """
         try:
             self._queue = list(queue)
+            restore_index = None
 
             # Use batch_update to prevent intermediate renders
             with self.app.batch_update():
@@ -90,8 +93,10 @@ class DownloadQueueWidget(Vertical):
                     listview = self.query_one("#queue-listview", ListView)
                     listview.clear()
 
-                    for entry in self._queue:
+                    for i, entry in enumerate(self._queue):
                         listview.append(QueueItem(entry))
+                        if restore_entry_id is not None and entry.id == restore_entry_id:
+                            restore_index = i
                 except Exception:
                     pass
 
@@ -104,6 +109,16 @@ class DownloadQueueWidget(Vertical):
                         status.update(f"Slots: {available_slots}/8 available")
                 except Exception:
                     pass
+
+            # Restore selection after batch update settles
+            if restore_index is not None:
+                def do_restore(idx: int = restore_index) -> None:
+                    try:
+                        lv = self.query_one("#queue-listview", ListView)
+                        lv.index = idx
+                    except Exception:
+                        pass
+                self.set_timer(0.1, do_restore)
         except Exception:
             pass
 

@@ -112,6 +112,8 @@ class MainScreen(Screen):
         ("q", "queue", "Queue"),
         ("s", "start_queue", "Start Queue"),
         ("t", "retry", "Retry"),
+        ("[", "promote", "Promote"),
+        ("]", "demote", "Demote"),
         ("?", "help", "Help"),
         ("escape", "quit", "Quit"),
     ]
@@ -309,6 +311,9 @@ class MainScreen(Screen):
             return self._get_highlighted_followed_series() is not None
         if action == "retry":
             return self._get_selected_failed_queue_item() is not None
+        if action in ("promote", "demote"):
+            item = self._get_selected_queue_item()
+            return item is not None and item.entry.status == DownloadStatus.PENDING.value
         return True
 
     def compose(self) -> ComposeResult:
@@ -386,7 +391,7 @@ class MainScreen(Screen):
         except Exception:
             pass  # Silently ignore refresh errors
 
-    def _refresh_queue(self) -> None:
+    def _refresh_queue(self, restore_entry_id: int | None = None) -> None:
         """Refresh the download queue."""
         try:
             queue = self._download_service.get_queue()
@@ -404,7 +409,7 @@ class MainScreen(Screen):
                 next_time_str = None
 
             queue_widget = self.query_one(DownloadQueueWidget)
-            queue_widget.update_queue(queue, available, next_time_str)
+            queue_widget.update_queue(queue, available, next_time_str, restore_entry_id)
         except Exception:
             pass  # Silently ignore refresh errors
 
@@ -670,6 +675,17 @@ class MainScreen(Screen):
                 FollowDialog(series_name, existing_path, include_series),
                 handle_edit_result,
             )
+
+    def _get_selected_queue_item(self):
+        """Get the currently highlighted item in the queue list view."""
+        try:
+            listview = self.query_one("#queue-listview", ListView)
+            item = listview.highlighted_child
+            if isinstance(item, QueueItem):
+                return item
+        except Exception:
+            pass
+        return None
 
     def _get_selected_failed_queue_item(self):
         """Get the currently selected queue item if it is in FAILED status."""
@@ -1142,6 +1158,34 @@ class MainScreen(Screen):
             self._download_service.retry_failed(item.entry)
             self._set_status(f"Retrying: {title}")
             self._refresh_queue()
+        except Exception as e:
+            self._set_status(f"Error: {e}")
+
+    def action_promote(self) -> None:
+        """Move the selected queue item one position up."""
+        try:
+            item = self._get_selected_queue_item()
+            if not item:
+                return
+            entry_id = item.entry.id
+            moved = self._download_service.promote(item.entry)
+            if not moved:
+                self._set_status("Already at top of queue")
+            self._refresh_queue(restore_entry_id=entry_id)
+        except Exception as e:
+            self._set_status(f"Error: {e}")
+
+    def action_demote(self) -> None:
+        """Move the selected queue item one position down."""
+        try:
+            item = self._get_selected_queue_item()
+            if not item:
+                return
+            entry_id = item.entry.id
+            moved = self._download_service.demote(item.entry)
+            if not moved:
+                self._set_status("Already at bottom of queue")
+            self._refresh_queue(restore_entry_id=entry_id)
         except Exception as e:
             self._set_status(f"Error: {e}")
 

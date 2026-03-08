@@ -8,7 +8,7 @@ A terminal user interface (TUI) for managing and downloading manga chapters from
 - **Fetch new chapters** from the releases page
 - **Follow series** to automatically queue new chapters for download
 - **Ignore series** to automatically skip unwanted content
-- **Download queue** with rate limiting (8 downloads per 24 hours)
+- **Download queue** with rate limiting (8 downloads per 24 hours) and manual reordering
 - **ComicInfo.xml metadata** automatically added to downloaded CBZ files
 - **Volume detection** from series pages for proper file naming
 - **Archive conversion** - automatically converts RAR/7z to CBZ
@@ -44,6 +44,11 @@ dsdown
 | `p` | Mark chapter as processed (skip) |
 | `q` | Queue chapter for download |
 | `s` | Start processing download queue |
+| `t` | Retry a failed download |
+| `[` | Promote selected queue item (move up) |
+| `]` | Demote selected queue item (move down) |
+| `b` | Queue all backlog chapters for a followed series |
+| `r` | Refresh metadata for a followed series |
 | `o` | Open chapter in browser |
 | `Enter` | Edit followed series / Unignore ignored series |
 | `?` | Help |

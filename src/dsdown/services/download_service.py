@@ -112,6 +112,63 @@ class DownloadService:
         entry.status = DownloadStatus.PENDING.value
         self.session.commit()
 
+    def _get_pending_queue_ordered(self) -> list[DownloadQueue]:
+        """Return pending queue items in display order (priority DESC, added_at ASC)."""
+        stmt = (
+            select(DownloadQueue)
+            .options(joinedload(DownloadQueue.chapter))
+            .where(DownloadQueue.status == DownloadStatus.PENDING.value)
+            .order_by(DownloadQueue.priority.desc(), DownloadQueue.added_at)
+        )
+        return list(self.session.execute(stmt).scalars().unique().all())
+
+    def _normalize_priorities(self, items: list[DownloadQueue]) -> None:
+        """Assign sequential priority values so adjacent items can be swapped."""
+        n = len(items)
+        for i, item in enumerate(items):
+            item.priority = n - i  # index 0 → highest priority
+        self.session.commit()
+
+    def promote(self, entry: DownloadQueue) -> bool:
+        """Move a pending queue entry one position toward the top.
+
+        Returns True if the item was moved, False if already at top or not pending.
+        """
+        if entry.status != DownloadStatus.PENDING.value:
+            return False
+        items = self._get_pending_queue_ordered()
+        self._normalize_priorities(items)
+        items = self._get_pending_queue_ordered()
+        idx = next((i for i, item in enumerate(items) if item.id == entry.id), None)
+        if idx is None or idx == 0:
+            return False
+        items[idx].priority, items[idx - 1].priority = (
+            items[idx - 1].priority,
+            items[idx].priority,
+        )
+        self.session.commit()
+        return True
+
+    def demote(self, entry: DownloadQueue) -> bool:
+        """Move a pending queue entry one position toward the bottom.
+
+        Returns True if the item was moved, False if already at bottom or not pending.
+        """
+        if entry.status != DownloadStatus.PENDING.value:
+            return False
+        items = self._get_pending_queue_ordered()
+        self._normalize_priorities(items)
+        items = self._get_pending_queue_ordered()
+        idx = next((i for i, item in enumerate(items) if item.id == entry.id), None)
+        if idx is None or idx == len(items) - 1:
+            return False
+        items[idx].priority, items[idx + 1].priority = (
+            items[idx + 1].priority,
+            items[idx].priority,
+        )
+        self.session.commit()
+        return True
+
     def get_available_slots(self) -> int:
         """Get the number of available download slots.
 
