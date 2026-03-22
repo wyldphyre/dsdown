@@ -41,6 +41,13 @@ def extract_chapter_number(title: str) -> str | None:
     for pattern in patterns:
         match = re.search(pattern, title_lower, re.IGNORECASE)
         if match:
-            return match.group(1)
+            num_str = match.group(1)
+            # Strip leading zeros (e.g. "04" -> "4", "04.5" -> "4.5")
+            if "." in num_str:
+                int_part, dec_part = num_str.split(".", 1)
+                num_str = str(int(int_part)) + "." + dec_part
+            else:
+                num_str = str(int(num_str))
+            return num_str
 
     return None
