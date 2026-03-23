@@ -91,6 +91,10 @@ class DownloadService:
         ).scalar_one_or_none()
 
         if existing:
+            # If previously completed or failed, reset to pending so it re-downloads
+            if existing.status in (DownloadStatus.COMPLETED.value, DownloadStatus.FAILED.value):
+                existing.status = DownloadStatus.PENDING.value
+                self.session.commit()
             return existing
 
         entry = DownloadQueue(

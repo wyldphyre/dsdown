@@ -12,6 +12,7 @@ from textual.screen import Screen
 from textual.widgets import (
     Footer,
     Header,
+    Input,
     Label,
     ListItem,
     ListView,
@@ -251,6 +252,11 @@ class MainScreen(Screen):
         min-height: 3;
     }
 
+    #history-search {
+        height: 3;
+        margin: 0;
+    }
+
     #history-listview {
         height: 1fr;
         min-height: 3;
@@ -303,6 +309,7 @@ class MainScreen(Screen):
         self._series_service = None
         self._download_service = None
         self._selected_chapter: Chapter | None = None
+        self._history_chapters: list[Chapter] = []
 
     def check_action(self, action: str, parameters: tuple) -> bool | None:
         """Check if an action should be shown/enabled."""
@@ -330,6 +337,7 @@ class MainScreen(Screen):
                 with TabPane("Ignored", id="ignored-tab"):
                     yield ListView(id="ignored-listview")
                 with TabPane("History", id="history-tab"):
+                    yield Input(placeholder="Search history...", id="history-search")
                     yield ListView(id="history-listview")
 
         with Vertical(id="right-panel"):
@@ -475,14 +483,29 @@ class MainScreen(Screen):
     def _refresh_history(self) -> None:
         """Refresh the history list with all chapters."""
         try:
-            all_chapters = self._chapter_service.get_all_chapters()
+            self._history_chapters = list(self._chapter_service.get_all_chapters())
+            try:
+                query = self.query_one("#history-search", Input).value
+            except Exception:
+                query = ""
+            self._apply_history_filter(query)
+        except Exception:
+            pass
 
+    def _apply_history_filter(self, query: str) -> None:
+        """Filter the history list by search query."""
+        try:
+            term = query.strip().lower()
+            chapters = (
+                [c for c in self._history_chapters
+                 if term in c.title.lower() or (c.series and term in c.series.name.lower())]
+                if term else self._history_chapters
+            )
             history_list = self.query_one("#history-listview", ListView)
             history_list.clear()
-            for chapter in all_chapters:
+            for chapter in chapters:
                 history_list.append(HistoryListItem(chapter))
-
-            self._update_tab_label("history-tab", f"History ({len(all_chapters)})")
+            self._update_tab_label("history-tab", f"History ({len(self._history_chapters)})")
         except Exception:
             pass
 
@@ -603,6 +626,11 @@ class MainScreen(Screen):
         """Handle focus changes to refresh conditional bindings."""
         self.refresh_bindings()
 
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Filter history list as the user types in the search box."""
+        if event.input.id == "history-search":
+            self._apply_history_filter(event.value)
+
     def on_chapter_list_chapter_selected(self, event: ChapterList.ChapterSelected) -> None:
         """Handle chapter selection (Enter key)."""
         self._selected_chapter = event.chapter
@@ -694,6 +722,17 @@ class MainScreen(Screen):
             item = listview.highlighted_child
             if isinstance(item, QueueItem) and item.entry.status == DownloadStatus.FAILED.value:
                 return item
+        except Exception:
+            pass
+        return None
+
+    def _get_selected_history_chapter(self) -> Chapter | None:
+        """Get the highlighted chapter from the history list view."""
+        try:
+            history_list = self.query_one("#history-listview", ListView)
+            item = history_list.highlighted_child
+            if isinstance(item, HistoryListItem):
+                return self._chapter_service.get_chapter_by_id(item.chapter.id)
         except Exception:
             pass
         return None
@@ -1094,23 +1133,27 @@ class MainScreen(Screen):
     def action_queue(self) -> None:
         """Add the selected chapter to the download queue."""
         try:
-            chapter_list = self.query_one(ChapterList)
-            current_index = chapter_list.get_highlighted_index()
-
+            # Try unprocessed list first, then fall back to history list
             chapter = self._get_selected_chapter()
+            from_history = False
+            if not chapter:
+                chapter = self._get_selected_history_chapter()
+                from_history = True
+
             if not chapter:
                 self._set_status("No chapter selected")
                 return
 
             title = chapter.title
             self._download_service.add_to_queue(chapter)
-            self._chapter_service.mark_processed(chapter)
+            if not from_history:
+                chapter_list = self.query_one(ChapterList)
+                current_index = chapter_list.get_highlighted_index()
+                self._chapter_service.mark_processed(chapter)
+                self._refresh_chapters(current_index)
+                self._refresh_series()
             self._set_status(f"Queued: {title}")
-
-            # Refresh with restored selection
-            self._refresh_chapters(current_index)
             self._refresh_queue()
-            self._refresh_series()
         except Exception as e:
             self._set_status(f"Error: {e}")
 
