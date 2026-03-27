@@ -310,16 +310,17 @@ class DownloadService:
             for i, entry in enumerate(to_process):
                 chapter = entry.chapter
 
+                # Update status to downloading and record slot usage immediately
+                entry.status = DownloadStatus.DOWNLOADING.value
+                self.session.commit()
+                self.record_download_start(chapter)
+
                 if progress_callback:
                     progress_callback(
                         f"Downloading: {chapter.title}",
                         i + 1,
                         len(to_process),
                     )
-
-                # Update status to downloading
-                entry.status = DownloadStatus.DOWNLOADING.value
-                self.session.commit()
 
                 try:
                     # Fetch volume info from series page if not already set
@@ -330,9 +331,6 @@ class DownloadService:
                         destination = Path(chapter.series.download_path)
                     else:
                         destination = Path.home() / "Downloads" / "dsdown"
-
-                    # Record download start for rate limiting
-                    self.record_download_start(chapter)
 
                     # Download the chapter with series name and title for filename
                     # Only include series name if the setting is enabled
