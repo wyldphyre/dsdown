@@ -4,7 +4,7 @@ A terminal user interface (TUI) for managing and downloading manga chapters from
 
 ## Features
 
-- **Tabbed interface** with Unprocessed, Followed, and Ignored tabs
+- **Tabbed interface** with Unprocessed, Followed, Ignored, and History tabs
 - **Fetch new chapters** from the releases page
 - **Follow series** to automatically queue new chapters for download
 - **Ignore series** to automatically skip unwanted content

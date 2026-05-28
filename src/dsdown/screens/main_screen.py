@@ -820,10 +820,17 @@ class MainScreen(Screen):
     def action_follow(self) -> None:
         """Follow the series of the selected chapter."""
         try:
-            chapter_list = self.query_one(ChapterList)
-            current_index = chapter_list.get_highlighted_index()
-
+            # Try unprocessed list first, then fall back to history list
             chapter = self._get_selected_chapter()
+            from_history = False
+            current_index = None
+            if chapter:
+                chapter_list = self.query_one(ChapterList)
+                current_index = chapter_list.get_highlighted_index()
+            else:
+                chapter = self._get_selected_history_chapter()
+                from_history = True
+
             if not chapter:
                 self._set_status("No chapter selected")
                 return
@@ -835,6 +842,13 @@ class MainScreen(Screen):
             series_name = chapter.series.name
             series_id = chapter.series_id
             series_url = chapter.series.url
+
+            # When following from history, check if already followed
+            if from_history:
+                series = self._series_service.get_series_by_id(series_id)
+                if series and series.is_followed:
+                    self._set_status(f"Already following: {series_name}")
+                    return
 
             async def do_follow(result: FollowDialogResult) -> None:
                 """Perform the follow operation with metadata fetch."""
@@ -886,10 +900,12 @@ class MainScreen(Screen):
 
                     self._set_status(f"Following series: {series_name}")
 
-                    # Refresh with restored selection
-                    self._refresh_chapters(current_index)
+                    if not from_history:
+                        self._refresh_chapters(current_index)
                     self._refresh_queue()
                     self._refresh_series()
+                    if from_history:
+                        self._refresh_history()
                 except Exception as e:
                     self._set_status(f"Error: {e}")
 
@@ -1055,9 +1071,16 @@ class MainScreen(Screen):
                                     authors = []
                                     tags = []
 
+                                # Prefix series name if absent, to match releases-page title format
+                                full_title = (
+                                    f"{series_name} {ch_title}"
+                                    if not ch_title.lower().startswith(series_name.lower())
+                                    else ch_title
+                                )
+
                                 chapter = self._chapter_service.create_chapter(
                                     url=ch_url,
-                                    title=ch_title,
+                                    title=full_title,
                                     authors=authors,
                                     tags=tags,
                                     series_id=series_id,
