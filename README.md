@@ -27,9 +27,10 @@ pip install -e .
 
 ## Usage
 
-With the virtual environment activated, run:
+Activate the virtual environment, then run:
 
 ```bash
+source .venv/bin/activate
 dsdown
 ```
 
