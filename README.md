@@ -30,7 +30,7 @@ pip install -e .
 Activate the virtual environment, then run:
 
 ```bash
-source .venv/bin/activate
+source /Users/craigr/Git/dsdown/.venv/bin/activate
 dsdown
 ```
 
