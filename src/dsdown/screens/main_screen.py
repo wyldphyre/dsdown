@@ -726,9 +726,22 @@ class MainScreen(Screen):
             pass
         return None
 
-    def _get_selected_history_chapter(self) -> Chapter | None:
-        """Get the highlighted chapter from the history list view."""
+    def _history_tab_active(self) -> bool:
+        """Check whether the History tab is the active tab."""
         try:
+            return self.query_one(TabbedContent).active == "history-tab"
+        except Exception:
+            return False
+
+    def _get_selected_history_chapter(self) -> Chapter | None:
+        """Get the highlighted chapter from the history list view.
+
+        Returns None unless the History tab is the active tab, so actions
+        never operate on an offscreen history highlight.
+        """
+        try:
+            if not self._history_tab_active():
+                return None
             history_list = self.query_one("#history-listview", ListView)
             item = history_list.highlighted_child
             if isinstance(item, HistoryListItem):
@@ -820,16 +833,14 @@ class MainScreen(Screen):
     def action_follow(self) -> None:
         """Follow the series of the selected chapter."""
         try:
-            # Try unprocessed list first, then fall back to history list
-            chapter = self._get_selected_chapter()
-            from_history = False
-            current_index = None
-            if chapter:
+            # Take the chapter from whichever tab is active
+            if self._history_tab_active():
+                chapter = self._get_selected_history_chapter()
+                current_index = None
+            else:
+                chapter = self._get_selected_chapter()
                 chapter_list = self.query_one(ChapterList)
                 current_index = chapter_list.get_highlighted_index()
-            else:
-                chapter = self._get_selected_history_chapter()
-                from_history = True
 
             if not chapter:
                 self._set_status("No chapter selected")
@@ -843,12 +854,12 @@ class MainScreen(Screen):
             series_id = chapter.series_id
             series_url = chapter.series.url
 
-            # When following from history, check if already followed
-            if from_history:
-                series = self._series_service.get_series_by_id(series_id)
-                if series and series.is_followed:
-                    self._set_status(f"Already following: {series_name}")
-                    return
+            # Do nothing if already followed; Enter on the Followed tab
+            # is the way to edit an existing series' settings
+            series = self._series_service.get_series_by_id(series_id)
+            if series and series.is_followed:
+                self._set_status(f"Already following: {series_name}")
+                return
 
             async def do_follow(result: FollowDialogResult) -> None:
                 """Perform the follow operation with metadata fetch."""
@@ -900,12 +911,10 @@ class MainScreen(Screen):
 
                     self._set_status(f"Following series: {series_name}")
 
-                    if not from_history:
-                        self._refresh_chapters(current_index)
+                    self._refresh_chapters(current_index)
                     self._refresh_queue()
                     self._refresh_series()
-                    if from_history:
-                        self._refresh_history()
+                    self._refresh_history()
                 except Exception as e:
                     self._set_status(f"Error: {e}")
 
@@ -1071,11 +1080,19 @@ class MainScreen(Screen):
                                     authors = []
                                     tags = []
 
-                                # Prefix series name if absent, to match releases-page title format
+                                # Prefix series name if absent, to match
+                                # releases-page title format; require a word
+                                # boundary so e.g. series "In" doesn't match
+                                # a title starting with "Into"
+                                title_lower = ch_title.lower()
+                                name_lower = series_name.lower()
+                                has_series_prefix = (
+                                    title_lower == name_lower
+                                    or title_lower.startswith(name_lower + " ")
+                                )
                                 full_title = (
-                                    f"{series_name} {ch_title}"
-                                    if not ch_title.lower().startswith(series_name.lower())
-                                    else ch_title
+                                    ch_title if has_series_prefix
+                                    else f"{series_name} {ch_title}"
                                 )
 
                                 chapter = self._chapter_service.create_chapter(
@@ -1156,12 +1173,13 @@ class MainScreen(Screen):
     def action_queue(self) -> None:
         """Add the selected chapter to the download queue."""
         try:
-            # Try unprocessed list first, then fall back to history list
-            chapter = self._get_selected_chapter()
-            from_history = False
-            if not chapter:
-                chapter = self._get_selected_history_chapter()
-                from_history = True
+            # Take the chapter from whichever tab is active
+            from_history = self._history_tab_active()
+            chapter = (
+                self._get_selected_history_chapter()
+                if from_history
+                else self._get_selected_chapter()
+            )
 
             if not chapter:
                 self._set_status("No chapter selected")

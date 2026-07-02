@@ -310,19 +310,17 @@ class DownloadService:
             for i, entry in enumerate(to_process):
                 chapter = entry.chapter
 
-                # Update status to downloading and record slot usage immediately
-                entry.status = DownloadStatus.DOWNLOADING.value
-                self.session.commit()
-                self.record_download_start(chapter)
-
-                if progress_callback:
-                    progress_callback(
-                        f"Downloading: {chapter.title}",
-                        i + 1,
-                        len(to_process),
-                    )
-
                 try:
+                    entry.status = DownloadStatus.DOWNLOADING.value
+                    self.session.commit()
+
+                    if progress_callback:
+                        progress_callback(
+                            f"Downloading: {chapter.title}",
+                            i + 1,
+                            len(to_process),
+                        )
+
                     # Fetch volume info from series page if not already set
                     await self._fetch_volume_info(chapter, client)
 
@@ -348,6 +346,11 @@ class DownloadService:
                         if download_progress_callback:
                             download_progress_callback(chapter.title, downloaded, total)
 
+                    # Record slot usage immediately before initiating the
+                    # download; the slot is consumed once the download starts,
+                    # regardless of whether it succeeds
+                    self.record_download_start(chapter)
+
                     cbz_path = await client.download_chapter(
                         chapter.url,
                         destination,
@@ -370,7 +373,8 @@ class DownloadService:
                     _open_folder_in_file_manager(destination)
 
                 except Exception as e:
-                    # Mark as failed
+                    # Reset the session in case the failure was a commit error
+                    self.session.rollback()
                     entry.status = DownloadStatus.FAILED.value
                     if progress_callback:
                         progress_callback(f"Failed: {chapter.title} - {e}", i + 1, len(to_process))
