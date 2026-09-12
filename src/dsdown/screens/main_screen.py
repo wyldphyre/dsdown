@@ -113,6 +113,7 @@ class MainScreen(Screen):
         ("q", "queue", "Queue"),
         ("s", "start_queue", "Start Queue"),
         ("t", "retry", "Retry"),
+        ("x", "clear_failed", "Clear Failed"),
         ("[", "promote", "Promote"),
         ("]", "demote", "Demote"),
         ("?", "help", "Help"),
@@ -316,7 +317,7 @@ class MainScreen(Screen):
         if action in ("unfollow", "queue_backlog"):
             # Only show when followed series list has focus
             return self._get_highlighted_followed_series() is not None
-        if action == "retry":
+        if action in ("retry", "clear_failed"):
             return self._get_selected_failed_queue_item() is not None
         if action in ("promote", "demote"):
             item = self._get_selected_queue_item()
@@ -1241,6 +1242,19 @@ class MainScreen(Screen):
             title = item.entry.chapter.title
             self._download_service.retry_failed(item.entry)
             self._set_status(f"Retrying: {title}")
+            self._refresh_queue()
+        except Exception as e:
+            self._set_status(f"Error: {e}")
+
+    def action_clear_failed(self) -> None:
+        """Remove a failed queue item from the download queue."""
+        try:
+            item = self._get_selected_failed_queue_item()
+            if not item:
+                return
+            title = item.entry.chapter.title
+            self._download_service.remove_from_queue(item.entry)
+            self._set_status(f"Cleared failed download: {title}")
             self._refresh_queue()
         except Exception as e:
             self._set_status(f"Error: {e}")

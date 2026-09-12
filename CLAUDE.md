@@ -51,6 +51,7 @@ src/dsdown/
 - `q` - Queue chapter for download
 - `s` - Start processing download queue
 - `t` - Retry a failed download (only available when a failed queue item is selected)
+- `x` - Clear a failed download from the queue (only available when a failed queue item is selected)
 - `o` - Open chapter URL in browser
 - `Enter` - On followed series: edit settings; On ignored series: unignore it
 - `?` - Help

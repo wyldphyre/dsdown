@@ -46,6 +46,7 @@ dsdown
 | `q` | Queue chapter for download |
 | `s` | Start processing download queue |
 | `t` | Retry a failed download |
+| `x` | Clear a failed download from the queue |
 | `[` | Promote selected queue item (move up) |
 | `]` | Demote selected queue item (move down) |
 | `b` | Queue all backlog chapters for a followed series |
