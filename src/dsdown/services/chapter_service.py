@@ -116,6 +116,11 @@ class ChapterService:
         chapter.processed = True
         self.session.commit()
 
+    def mark_unprocessed(self, chapter: Chapter) -> None:
+        """Mark a chapter as unprocessed so it returns to the Unprocessed list."""
+        chapter.processed = False
+        self.session.commit()
+
     def mark_downloaded(self, chapter: Chapter) -> None:
         """Mark a chapter as downloaded."""
         chapter.downloaded = True

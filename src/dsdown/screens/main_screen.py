@@ -706,9 +706,19 @@ class MainScreen(Screen):
             )
 
     def _get_selected_queue_item(self):
-        """Get the currently highlighted item in the queue list view."""
+        """Get the currently highlighted item in the queue list view.
+
+        Returns None unless the queue list has focus. The ListView always
+        highlights a child once it has items, so without this check the
+        queue actions would act on the top entry while another list is
+        being browsed.
+        """
         try:
             listview = self.query_one("#queue-listview", ListView)
+            if not listview.has_focus:
+                return None
+            if listview.index is None:
+                return None
             item = listview.highlighted_child
             if isinstance(item, QueueItem):
                 return item
@@ -717,14 +727,14 @@ class MainScreen(Screen):
         return None
 
     def _get_selected_failed_queue_item(self):
-        """Get the currently selected queue item if it is in FAILED status."""
-        try:
-            listview = self.query_one("#queue-listview", ListView)
-            item = listview.highlighted_child
-            if isinstance(item, QueueItem) and item.entry.status == DownloadStatus.FAILED.value:
-                return item
-        except Exception:
-            pass
+        """Get the currently selected queue item if it is in FAILED status.
+
+        Returns None unless the queue list has focus, so a failed entry is
+        never retried or cleared while another list is being browsed.
+        """
+        item = self._get_selected_queue_item()
+        if item is not None and item.entry.status == DownloadStatus.FAILED.value:
+            return item
         return None
 
     def _history_tab_active(self) -> bool:
@@ -1247,15 +1257,30 @@ class MainScreen(Screen):
             self._set_status(f"Error: {e}")
 
     def action_clear_failed(self) -> None:
-        """Remove a failed queue item from the download queue."""
+        """Remove a failed queue item from the download queue.
+
+        The chapter is returned to the Unprocessed list so it is not lost:
+        queueing marked it processed, and a failed download never set the
+        downloaded flag.
+        """
         try:
             item = self._get_selected_failed_queue_item()
             if not item:
                 return
-            title = item.entry.chapter.title
+            chapter = item.entry.chapter
+            title = chapter.title
+            restored = not chapter.downloaded
             self._download_service.remove_from_queue(item.entry)
-            self._set_status(f"Cleared failed download: {title}")
+            if restored:
+                self._chapter_service.mark_unprocessed(chapter)
+            self._set_status(
+                f"Cleared failed download: {title}"
+                + (" (back in Unprocessed)" if restored else "")
+            )
             self._refresh_queue()
+            if restored:
+                self._refresh_chapters()
+                self._refresh_series()
         except Exception as e:
             self._set_status(f"Error: {e}")
 
