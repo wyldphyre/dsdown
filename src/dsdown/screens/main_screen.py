@@ -358,6 +358,12 @@ class MainScreen(Screen):
         self._series_service = SeriesService(self._session)
         self._download_service = DownloadService(self._session)
 
+        # No download can be in progress yet, so any DOWNLOADING entries were
+        # orphaned by a previous run exiting mid-download
+        reset = self._download_service.reset_stale_downloads()
+        if reset:
+            self._set_status(f"Reset {reset} interrupted download(s) to pending")
+
         # Load initial data with a small delay to ensure widgets are ready
         self.set_timer(0.1, self._refresh_all)
 

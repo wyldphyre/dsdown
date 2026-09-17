@@ -116,6 +116,28 @@ class DownloadService:
         entry.status = DownloadStatus.PENDING.value
         self.session.commit()
 
+    def reset_stale_downloads(self) -> int:
+        """Reset entries left in DOWNLOADING back to PENDING.
+
+        An entry is only DOWNLOADING while process_queue is running, so any
+        found at startup were orphaned by the app exiting mid-download.
+        Without this they are never picked up again, since process_queue
+        only processes PENDING entries.
+
+        Returns:
+            Number of entries reset.
+        """
+        stale = self.session.execute(
+            select(DownloadQueue).where(
+                DownloadQueue.status == DownloadStatus.DOWNLOADING.value
+            )
+        ).scalars().all()
+        for entry in stale:
+            entry.status = DownloadStatus.PENDING.value
+        if stale:
+            self.session.commit()
+        return len(stale)
+
     def _get_pending_queue_ordered(self) -> list[DownloadQueue]:
         """Return pending queue items in display order (priority DESC, added_at ASC)."""
         stmt = (
