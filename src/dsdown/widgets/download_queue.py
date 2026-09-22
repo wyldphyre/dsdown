@@ -93,10 +93,13 @@ class DownloadQueueWidget(Vertical):
                     listview = self.query_one("#queue-listview", ListView)
                     listview.clear()
 
+                    items = []
                     for i, entry in enumerate(self._queue):
-                        listview.append(QueueItem(entry))
+                        items.append(QueueItem(entry))
                         if restore_entry_id is not None and entry.id == restore_entry_id:
                             restore_index = i
+                    if items:
+                        listview.extend(items)
                 except Exception:
                     pass
 

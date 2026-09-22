@@ -114,12 +114,16 @@ class ChapterList(Vertical):
                         reverse=True,
                     )
 
+                    # Build every row first and mount in one pass; mounting
+                    # items one at a time dominates the refresh cost
+                    items: list[ListItem] = []
                     for release_date in sorted_dates:
                         chapters = chapters_by_date[release_date]
                         # Add date header
-                        listview.append(DateHeaderItem(release_date))
-                        for chapter in chapters:
-                            listview.append(ChapterItem(chapter))
+                        items.append(DateHeaderItem(release_date))
+                        items.extend(ChapterItem(chapter) for chapter in chapters)
+                    if items:
+                        listview.extend(items)
                 except Exception:
                     pass
 

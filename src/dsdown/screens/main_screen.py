@@ -6,10 +6,12 @@ import webbrowser
 from datetime import date, timezone
 from pathlib import Path
 
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Container, Vertical
 from textual.screen import Screen
 from textual.widgets import (
+    DataTable,
     Footer,
     Header,
     Input,
@@ -79,23 +81,23 @@ class SeriesListItem(ListItem):
         yield Label(f"• {self.series.name}", classes="series-name")
 
 
-class HistoryListItem(ListItem):
-    """A chapter item for the history list."""
+def _history_row(chapter: Chapter) -> Text:
+    """Render one history row.
 
-    def __init__(self, chapter: Chapter) -> None:
-        super().__init__()
-        self.chapter = chapter
+    DataTable cells are Rich renderables rather than markup strings, so the
+    styling HistoryListItem used to express as tags is assembled here.
+    """
+    if chapter.downloaded:
+        indicator = Text("✓ ", style="bold #00ff00")
+    elif chapter.processed:
+        indicator = Text("— ", style="dim")
+    else:
+        indicator = Text("○ ")
 
-    def compose(self) -> ComposeResult:
-        if self.chapter.downloaded:
-            indicator = "[bold #00ff00]✓[/bold #00ff00]"
-        elif self.chapter.processed:
-            indicator = "[dim]—[/dim]"
-        else:
-            indicator = "○"
-
-        series_name = f" [dim]({self.chapter.series.name})[/dim]" if self.chapter.series else ""
-        yield Label(f"{indicator} {self.chapter.title}{series_name}", classes="history-item-title")
+    row = indicator + Text(chapter.title)
+    if chapter.series:
+        row += Text(f" ({chapter.series.name})", style="dim")
+    return row
 
 
 class MainScreen(Screen):
@@ -258,16 +260,9 @@ class MainScreen(Screen):
         margin: 0;
     }
 
-    #history-listview {
+    #history-table {
         height: 1fr;
         min-height: 3;
-    }
-
-    HistoryListItem {
-        height: auto;
-    }
-
-    .history-item-title {
         width: 100%;
     }
 
@@ -339,7 +334,12 @@ class MainScreen(Screen):
                     yield ListView(id="ignored-listview")
                 with TabPane("History", id="history-tab"):
                     yield Input(placeholder="Search history...", id="history-search")
-                    yield ListView(id="history-listview")
+                    # DataTable renders only the visible rows; a ListView
+                    # mounts one widget per chapter, which made scrolling a
+                    # long history jerky
+                    yield DataTable(
+                        id="history-table", cursor_type="row", show_header=False
+                    )
 
         with Vertical(id="right-panel"):
             yield DownloadQueueWidget()
@@ -443,10 +443,13 @@ class MainScreen(Screen):
             try:
                 followed_list = self.query_one("#followed-listview", ListView)
                 followed_list.clear()
+                items = []
                 for i, series in enumerate(followed):
-                    followed_list.append(SeriesListItem(series))
+                    items.append(SeriesListItem(series))
                     if restore_followed_id and series.id == restore_followed_id:
                         restore_index = i
+                if items:
+                    followed_list.extend(items)
 
                 # Update the tab label with count
                 self._update_tab_label("followed-tab", f"Followed ({len(followed)})")
@@ -466,8 +469,8 @@ class MainScreen(Screen):
             try:
                 ignored_list = self.query_one("#ignored-listview", ListView)
                 ignored_list.clear()
-                for series in ignored:
-                    ignored_list.append(SeriesListItem(series))
+                if ignored:
+                    ignored_list.extend(SeriesListItem(series) for series in ignored)
 
                 # Update the tab label with count
                 self._update_tab_label("ignored-tab", f"Ignored ({len(ignored)})")
@@ -508,10 +511,12 @@ class MainScreen(Screen):
                  if term in c.title.lower() or (c.series and term in c.series.name.lower())]
                 if term else self._history_chapters
             )
-            history_list = self.query_one("#history-listview", ListView)
-            history_list.clear()
+            table = self.query_one("#history-table", DataTable)
+            if not table.columns:
+                table.add_column("Chapter", key="chapter")
+            table.clear()
             for chapter in chapters:
-                history_list.append(HistoryListItem(chapter))
+                table.add_row(_history_row(chapter), key=str(chapter.id))
             self._update_tab_label("history-tab", f"History ({len(self._history_chapters)})")
         except Exception:
             pass
@@ -614,11 +619,19 @@ class MainScreen(Screen):
         except Exception:
             pass
 
+    # Lists whose highlighted row decides whether a binding is available:
+    # followed drives unfollow/queue_backlog, queue drives retry/clear_failed
+    # and promote/demote. Highlighting elsewhere cannot change any binding,
+    # and refresh_bindings re-runs every check_action (each a DOM query), so
+    # calling it per keypress made navigating a long list noticeably jerky.
+    _BINDING_RELEVANT_LISTS = frozenset({"followed-listview", "queue-listview"})
+
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
         """Handle list view highlight changes."""
         if event.list_view.id == "followed-listview":
             self._update_series_detail_panel()
-        self.refresh_bindings()
+        if event.list_view.id in self._BINDING_RELEVANT_LISTS:
+            self.refresh_bindings()
 
     def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
         """Handle tab changes."""
@@ -759,10 +772,13 @@ class MainScreen(Screen):
         try:
             if not self._history_tab_active():
                 return None
-            history_list = self.query_one("#history-listview", ListView)
-            item = history_list.highlighted_child
-            if isinstance(item, HistoryListItem):
-                return self._chapter_service.get_chapter_by_id(item.chapter.id)
+            table = self.query_one("#history-table", DataTable)
+            if table.row_count == 0:
+                return None
+            row_key = table.coordinate_to_cell_key(table.cursor_coordinate).row_key
+            if row_key is None or row_key.value is None:
+                return None
+            return self._chapter_service.get_chapter_by_id(int(row_key.value))
         except Exception:
             pass
         return None
